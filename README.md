@@ -131,3 +131,38 @@ docker run -d --name sitezy.ai-container -p 5001:5000 --env-file backend/.env -e
 ---
 
 > **BUILT BY: npm i asmr**
+
+## 👥 Contributors
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/ronitsahoo">
+        <img src="https://github.com/ronitsahoo.png" width="100px;" alt="Ronit Sahoo"/>
+        <br />
+        <sub><b>Ronit Sahoo</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/Manaswi-01">
+        <img src="https://github.com/Manaswi-01.png" width="100px;" alt="Manaswi"/>
+        <br />
+        <sub><b>Manaswi</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/shaktisankpal">
+        <img src="https://github.com/shaktisankpal.png" width="100px;" alt="Shakti Sankpal"/>
+        <br />
+        <sub><b>Shakti Sankpal</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/AtharvaLotankar11">
+        <img src="https://github.com/AtharvaLotankar11.png" width="100px;" alt="Atharva Lotankar"/>
+        <br />
+        <sub><b>Atharva Lotankar</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
