@@ -1,0 +1,30 @@
+import axios from "axios";
+
+const api = axios.create({
+    baseURL: "/api",
+    headers: { "Content-Type": "application/json" },
+    timeout: 300000, // 5 minutes timeout for long-running AI analytics
+});
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem("sp_token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+});
+
+// Handle 401 globally
+api.interceptors.response.use(
+    (res) => res,
+    (err) => {
+        if (err.response?.status === 401) {
+            localStorage.removeItem("sp_token");
+            localStorage.removeItem("sp_user");
+            localStorage.removeItem("sp_tenant");
+            window.location.href = "/login";
+        }
+        return Promise.reject(err);
+    }
+);
+
+export default api;

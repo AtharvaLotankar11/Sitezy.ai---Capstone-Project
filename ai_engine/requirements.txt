@@ -1,0 +1,13 @@
+# SitePilot AI engine (Flask ML microservice, port 5050)
+# Existing: layout recommender (RandomForest + MiniLM zero-shot)
+# Added:    DL SEO scorer (MLP), design-flaw detector (autoencoder + IsolationForest),
+#           GRU engagement model. All extra models train on synthetic/bootstrap data
+#           via the train_*.py scripts and produce small .pt/.pkl/.json artifacts.
+flask>=3.0
+flask-cors>=4.0
+joblib>=1.3
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+torch>=2.2
+transformers>=4.40

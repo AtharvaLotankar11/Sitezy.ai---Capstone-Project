@@ -1,0 +1,51 @@
+# ─── Dependencies ───────────────────────────────────────────
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# ─── Secrets / environment ──────────────────────────────────
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+*.pem
+**/serviceAccount*.json
+**/firebase-adminsdk*.json
+
+# ─── Builds / output ────────────────────────────────────────
+dist/
+build/
+**/dist/
+**/build/
+*.tsbuildinfo
+
+# ─── Python (ai_engine) ─────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+*.egg-info/
+
+# Large ML model — exceeds GitHub's 100MB limit. The service degrades gracefully
+# without it; obtain it separately or use Git LFS if you need the layout recommender.
+ai_engine/layout_model.pkl
+
+# Headless-browser profile dirs / scratch created during local testing
+ai_engine/p_*/
+ai_engine/q_*/
+
+# ─── Logs / OS / editor ─────────────────────────────────────
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ─── Local screenshot / scratch artifacts ───────────────────
+_shots/
+*.local

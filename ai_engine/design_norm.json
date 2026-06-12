@@ -1,0 +1,29 @@
+{
+  "ae_thr": 0.1502700001001358,
+  "ae_err_mean": 0.0849539265036583,
+  "ae_err_std": 0.03608373925089836,
+  "if_mean": 0.06887968335040523,
+  "if_std": 0.03322339997468734,
+  "feature_order": [
+    "section_count",
+    "has_navbar",
+    "has_footer",
+    "has_hero",
+    "cta_count",
+    "text_section_count",
+    "gallery_count",
+    "heading_hierarchy_valid",
+    "avg_text_length",
+    "image_count",
+    "image_alt_coverage",
+    "min_contrast",
+    "avg_contrast",
+    "frac_low_contrast",
+    "distinct_bg_colors",
+    "distinct_fonts",
+    "cta_above_fold",
+    "duplicate_heading_ratio",
+    "empty_prop_ratio",
+    "structural_order_valid"
+  ]
+}
