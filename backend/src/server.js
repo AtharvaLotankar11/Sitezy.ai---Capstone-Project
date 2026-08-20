@@ -195,7 +195,7 @@ app.post("/api/layout", async (req, res) => {
         const prompt = req.body.prompt;
 
         const response = await axios.post(
-            "http://localhost:6000/generate-layout",
+            "http://127.0.0.1:5050/generate-layout",
             { prompt }
         );
 

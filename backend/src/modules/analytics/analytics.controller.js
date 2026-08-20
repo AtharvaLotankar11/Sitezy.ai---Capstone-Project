@@ -139,7 +139,7 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
                 
                 const result = await Promise.race([
                     ollamaClient.chat({
-                        model: 'qwen3.5:4b',
+                        model: 'qwen2.5:1.5b',
                         messages: [
                             { role: 'system', content: 'You are an advanced data analytics AI. You output strictly in JSON.' },
                             { role: 'user', content: prompt }

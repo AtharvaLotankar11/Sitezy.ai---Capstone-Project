@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import ollama, { Ollama } from "ollama";
+import { Ollama } from "ollama";
 import Joi from "joi";
 import AIUsageLog from "./aiUsageLog.model.js";
 import Page from "../builder/page.model.js";
@@ -571,7 +571,7 @@ export const generateLayout = async (req, res) => {
     try {
 
         const mlResponse = await axios.post(
-            "http://localhost:5050/generate-layout",
+            "http://127.0.0.1:5050/generate-layout",
             {
                 businessType,
                 tone,
@@ -829,7 +829,7 @@ COLOR RULES:
     let aiResponse = null;
     let success = true;
     let errorMessage = null;
-    let usedModel = preferredModel === "gemini" ? "gemini-3-flash-preview" : "qwen:4b (Ollama)";
+    let usedModel = preferredModel === "gemini" ? "gemini-3-flash-preview" : "qwen2.5:1.5b (Ollama)";
 
     try {
         let text = "";
@@ -840,9 +840,9 @@ COLOR RULES:
             console.log("🔵 [AI] Successfully used Pro AI for content generation.");
         } else {
             try {
-                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen3.5)...");
+                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen2.5)...");
                 const r = await ollamaClient.chat({
-                    model: 'qwen3.5:4b',
+                    model: 'qwen2.5:1.5b',
                     think: false,
                     messages: [
                         { role: 'system', content: 'You are an expert AI website generator and elite copywriter. You MUST generate unique, engaging content perfectly tailored to the requested business type. NEVER blindly copy placeholder text from templates.' },
@@ -1020,7 +1020,7 @@ COLOR RULES:
         // Use fallback layout on complete failure
         if (!aiResponse) {
             console.log("🔄 [AI] Using fallback layout due to error");
-            aiResponse = postProcessAIOutput(buildFallbackLayout(businessType, tone, targetAudience), businessType);
+            aiResponse = await postProcessAIOutput(buildFallbackLayout(businessType, tone, targetAudience), businessType);
             success = true; // Return fallback as success
             errorMessage = null;
         }
@@ -1108,10 +1108,10 @@ Return ONLY a JSON object (no prose, no markdown fences) with EXACTLY these keys
 Guidance: choose colors that truly match the concept's industry & mood (spa→soft rose, fintech→deep blue, eco→green, luxury dining→gold/espresso, kids→bright playful). Choose theme by vibe (sleek/premium/nightlife→Dark; clean/airy/editorial→Light).`;
 
         let text = "";
-        let usedModel = "qwen3.5:4b (Ollama)";
+        let usedModel = "qwen2.5:1.5b (Ollama)";
         try {
             const r = await ollamaClient.chat({
-                model: 'qwen3.5:4b',
+                model: 'qwen2.5:1.5b',
                 think: false,
                 messages: [
                     { role: 'system', content: 'You are a precise design configuration engine. You output only strict, valid JSON.' },
@@ -1211,9 +1211,9 @@ ${siteContext}
 `;
 
         try {
-            console.log("🤖 [AI Chat] Attempting answer with qwen3.5:4b...");
+            console.log("🤖 [AI Chat] Attempting answer with qwen2.5:1.5b...");
             const r = await ollamaClient.chat({
-                model: 'qwen3.5:4b',
+                model: 'qwen2.5:1.5b',
                 think: false,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -1226,7 +1226,7 @@ ${siteContext}
                 }
             });
             const answer = r.message.content || '';
-            console.log("🟢 [AI Chat] Answer generated via qwen:4b.");
+            console.log("🟢 [AI Chat] Answer generated via qwen2.5:1.5b.");
             return res.json({ success: true, answer });
         } catch (ollamaErr) {
             console.warn("⚠️ [AI Chat] Ollama failure, falling back to Gemini...");

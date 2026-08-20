@@ -12,7 +12,7 @@ import { Ollama } from "ollama";
 import axios from "axios";
 import Page from "../builder/page.model.js";
 
-const ML_BASE = process.env.AI_ENGINE_URL || "http://localhost:5050";
+const ML_BASE = process.env.AI_ENGINE_URL || "http://127.0.0.1:5050";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const gemini = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 const ollamaClient = new Ollama({ host: process.env.OLLAMA_HOST || "http://127.0.0.1:11434" });
@@ -102,10 +102,10 @@ Return ONLY JSON (no markdown):
 Rules: only edit existing fields shown above; keep each value concise and within sensible length; do not invent new sections; only include fields you actually improved.`;
 
     let text = "";
-    let model = "qwen3.5:4b (Ollama)";
+    let model = "qwen2.5:1.5b (Ollama)";
     try {
         const r = await ollamaClient.chat({
-            model: "qwen3.5:4b", think: false,
+            model: "qwen2.5:1.5b", think: false,
             messages: [
                 { role: "system", content: "You are a precise SEO copy editor. You output only strict, valid JSON." },
                 { role: "user", content: prompt },
@@ -171,7 +171,7 @@ export const autoImproveSeo = async (req, res) => {
 
         const before = await score();
         let current = before;
-        let model = "qwen3.5:4b (Ollama)";
+        let model = "qwen2.5:1.5b (Ollama)";
         const steps = [];
 
         for (let i = 0; i < maxIters; i++) {
