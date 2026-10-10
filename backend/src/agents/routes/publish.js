@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateJWT } from "../../middleware/auth.middleware.js";
+import { authenticateJWT, requireRole } from "../../middleware/auth.middleware.js";
 import orchestrator from "../orchestrator.js";
 import Website from "../../modules/website/website.model.js";
 import DeploymentLog from "../logs/deploymentLogs.js";
@@ -10,7 +10,8 @@ const router = express.Router();
  * POST /api/publish/:websiteId
  * Trigger AutoGen agent deployment to Firebase
  */
-router.post("/:websiteId", authenticateJWT, async (req, res) => {
+// Same roles as POST /api/websites/:id/publish
+router.post("/:websiteId", authenticateJWT, requireRole("OWNER", "ADMIN"), async (req, res) => {
     try {
         const { websiteId } = req.params;
         const userId = req.user.id;

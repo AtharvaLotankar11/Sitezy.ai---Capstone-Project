@@ -24,6 +24,12 @@ export const addDomain = async (req, res) => {
     const { domain, websiteId } = req.body;
     if (!domain) return res.status(400).json({ success: false, message: "domain is required" });
 
+    // A domain may only be linked to a website of the caller's own tenant
+    if (websiteId) {
+        const owned = await Website.exists({ _id: websiteId, tenantId: req.tenantId }).catch(() => null);
+        if (!owned) return res.status(404).json({ success: false, message: "Website not found" });
+    }
+
     const existing = await Domain.findOne({ domain: domain.toLowerCase() });
     if (existing) {
         return res.status(409).json({ success: false, message: "Domain already registered" });

@@ -8,6 +8,7 @@ import firebaseService from "../../agents/services/firebaseService.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Ollama } from "ollama";
 import { liveVisitors } from "../../sockets/visitor.socket.js";
+import { redactPII } from "../../utils/redact.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
@@ -116,11 +117,11 @@ export const getWebsiteAnalytics = async (req, res) => {
         let summary = "Not enough data for insights.";
 
         if (submissions.length > 0) {
-            const prompt = `
+            const buildPrompt = (rows) => `
 You are an advanced data analytics AI. Given the following form submissions from a business website, generate a structured analytics insight report. Think about what the business is and what kind of metrics make sense (e.g. juices sold, popular flavors, etc).
 
 Form Submissions Data:
-${JSON.stringify(submissions.slice(0, 100))} // Limit to 100 for token limits
+${JSON.stringify(rows)} // Limit to 100 for token limits
 
 Return a JSON object matching this structure EXACTLY. No markdown formatting, just raw JSON:
 {
@@ -130,6 +131,8 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
   ]
 }
 `;
+            const rows = submissions.slice(0, 100);
+            const prompt = buildPrompt(rows);
             // Try the fast local model first; fall back to the cloud model so insights
             // generate seamlessly even if the local model is unavailable.
             let responseText = "";
@@ -149,7 +152,8 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
             } catch (primaryErr) {
                 console.warn("[AI] Local model unavailable, using fallback:", primaryErr.message);
                 try {
-                    const result = await model.generateContent(prompt);
+                    // Submissions leave the host here, so visitor PII is redacted first.
+                    const result = await model.generateContent(buildPrompt(redactPII(rows)));
                     responseText = result.response.text();
                 } catch (fallbackErr) {
                     console.error("[AI] Insight generation failed:", fallbackErr.message);

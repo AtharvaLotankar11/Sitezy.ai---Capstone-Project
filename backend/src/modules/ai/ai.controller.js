@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from "uuid";
 import FirebaseAgent from "../../agents/firebaseAgent.js";
 import { aiUsageTotal } from "../../utils/metrics.js";
 import { searchUnsplash, searchUnsplashBatch } from "../../services/unsplash.service.js";
+import { redactText } from "../../utils/redact.js";
+import { repairForms } from "./formRepair.js";
 import axios from "axios";
 
 
@@ -527,7 +529,68 @@ const inputSchema = Joi.object({
     features: Joi.array().items(Joi.string()).min(1).required(),
     websiteId: Joi.string().allow("").optional(),
     preferredModel: Joi.string().valid("qwen", "gemini").optional(),
+    // Confirmed facts collected by the Prompt Tuner. Always optional — generation
+    // behaves exactly as before when it is absent.
+    brandDetails: Joi.object().unknown(true).optional(),
 }).unknown(true);
+
+// ─── Brand facts (Prompt Tuner answers → prompt block) ────────────────────────
+// How each confirmed fact must be used, spelled out for the model. Keys match
+// TUNE_FIELDS in the tuner below.
+const BRAND_FACT_USAGE = {
+    tagline: "Use this VERBATIM as the Hero heading (or as the Hero subheading if it is longer than 8 words). Do not reword it.",
+    positioning: "This is the brand's positioning. Every page's copy must reflect this angle.",
+    usp: "Lead the About/Text section with this differentiator and reference it in the CTA.",
+    services: "These are the ONLY services/products to advertise. Use them for Gallery items, service lists and DynamicForm select options. Do not invent extra ones.",
+    reviews: "REAL customer reviews. Render them as a Gallery section (e.g. heading \"What our customers say\") where each item's 'title' is the reviewer's name and 'description' is their quote, copied word for word. Never write additional reviews of your own.",
+    address: "The REAL business address. Print it EXACTLY as given in the Footer and on the Contact page. Never substitute a different street, city or country anywhere on the site.",
+    hours: "The REAL opening hours. Print them exactly as given in the Footer and on the Contact page.",
+    cta: "Use this as the primary ctaText on the Hero and CTA sections.",
+};
+
+const BRAND_FACT_LABELS = {
+    tagline: "Tagline", positioning: "Positioning / strategy", usp: "Unique selling point",
+    services: "Services offered", reviews: "Customer reviews", address: "Business address",
+    hours: "Opening hours", cta: "Primary call to action",
+};
+
+/** Render one answer (string, or array from a multi-select) as prompt text. */
+const formatBrandFactValue = (value) => {
+    if (Array.isArray(value)) {
+        return value
+            .map((v) => (typeof v === "string" ? v.trim() : JSON.stringify(v)))
+            .filter(Boolean)
+            .join(" | ");
+    }
+    return typeof value === "string" ? value.trim() : "";
+};
+
+/**
+ * Build the CONFIRMED BRAND FACTS prompt block from tuner answers. Only keys the
+ * user actually answered are included; returns "" when nothing was tuned.
+ */
+const formatBrandFacts = (brandDetails) => {
+    if (!brandDetails || typeof brandDetails !== "object") return "";
+
+    const lines = Object.keys(BRAND_FACT_USAGE)
+        .map((key) => {
+            const val = formatBrandFactValue(brandDetails[key]);
+            if (!val) return null;
+            return `- ${BRAND_FACT_LABELS[key]}: ${val}\n  → ${BRAND_FACT_USAGE[key]}`;
+        })
+        .filter(Boolean);
+
+    if (lines.length === 0) return "";
+
+    return `
+CONFIRMED BRAND FACTS (PROVIDED BY THE BUSINESS OWNER — HIGHEST PRIORITY):
+These are verified facts about the real business. Use them EXACTLY as written and build the
+copy around them. NEVER invent an alternative to a fact given here, never contradict one, and
+never replace one with a placeholder. Anything not listed here you may still write yourself.
+
+${lines.join("\n")}
+`;
+};
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -558,7 +621,8 @@ export const generateLayout = async (req, res) => {
         secondaryColor,
         theme,
         baseTemplateSections,
-        preferredModel
+        preferredModel,
+        brandDetails
     } = value;
 
 
@@ -684,6 +748,9 @@ export const generateLayout = async (req, res) => {
     // Build context-aware image keywords for the prompt
     const contextImages = getContextQueries(businessType).slice(0, 5).join(" | ");
 
+    // Facts confirmed through the Prompt Tuner — empty string when the user skipped it
+    const brandFactsBlock = formatBrandFacts(brandDetails);
+
     const prompt = `
 You are a world-class UI/UX designer and website architect. Your task is to generate a stunning, production-ready website layout in valid JSON. The output quality should match premium agencies like Webflow and Framer.
 
@@ -702,7 +769,7 @@ IMPORTANT - Base Template Override:
 Base Template:
 ${JSON.stringify(baseTemplateSections)}
 ` : ""}
-
+${brandFactsBlock}
 CRITICAL DESIGN RULES:
 1. Create visually stunning layouts with strong hierarchy
 2. Alternate section backgrounds for visual rhythm (white → light gray → white → etc.)
@@ -816,6 +883,8 @@ MANDATORY PAGE RULES:
 - Every page MUST start with Navbar and end with Footer
 - Generate exactly 3 pages: Home, About, Contact
 - Home page MUST include: Navbar, Hero, Text, Gallery, CTA, DynamicForm, Footer
+${brandDetails?.reviews ? `- The Home page MUST ALSO include a SECOND Gallery section holding the confirmed customer reviews (title = reviewer name, description = their exact quote, imageQuery = a portrait photo term such as "smiling customer portrait cafe"). Use ONLY the reviews provided above — do not add any of your own.` : ""}
+${brandFactsBlock ? `- Re-read the CONFIRMED BRAND FACTS above before writing each section, and reproduce every fact exactly.` : ""}
 - About page: Navbar, Hero or Text, Text, Gallery (team/values), Footer
 - Contact page: Navbar, ContactForm, Footer
 
@@ -897,6 +966,20 @@ COLOR RULES:
         } else {
             // Post-process: enforce image query structure, uniqueness, then fetch real Unsplash URLs
             aiResponse = await postProcessAIOutput(validated, businessType);
+        }
+
+        // The layout schema checks structure, not content: validate every form and
+        // regenerate only empty ones with a short local call (deterministic default on failure).
+        const formStats = await repairForms(aiResponse, { businessType, tone, targetAudience }, async (formPrompt) => {
+            const r = await ollamaClient.chat({
+                model: "qwen3.5:4b", think: false, format: "json",
+                messages: [{ role: "user", content: formPrompt }],
+                options: { num_predict: 900, num_ctx: 4096, temperature: 0.3 },
+            });
+            return r.message?.content || "";
+        });
+        if (formStats.regenerated || formStats.defaulted || formStats.contactDefaulted) {
+            console.log("📝 [AI] Form repair:", formStats);
         }
 
         // If websiteId provided, save pages to DB
@@ -1065,7 +1148,7 @@ COLOR RULES:
         tenantId: req.tenantId,
         userId: req.user._id,
         websiteId: websiteId || null,
-        prompt: { businessType, tone, targetAudience, features },
+        prompt: { businessType, tone, targetAudience, features, brandDetails: brandDetails || null },
         response: aiResponse,
         model: usedModel,
         success,
@@ -1194,6 +1277,218 @@ Guidance: choose colors that truly match the concept's industry & mood (spa→so
     }
 };
 
+// ─── Prompt Tuner ─────────────────────────────────────────────────────────────
+// Before generating, the tuner asks a handful of business-specific questions so the
+// site is built from facts the owner confirmed instead of invented filler.
+
+// Answers map onto these keys and nothing else, so generateLayout can rely on the shape.
+const TUNE_FIELDS = ["tagline", "positioning", "usp", "services", "reviews", "address", "hours", "cta"];
+const TUNE_TYPES = ["single", "multi", "text"];
+
+// Facts no model can guess — they exist only if the owner types them. Any question
+// the LLM returns for these is forced to free text so we never offer invented options.
+const TUNE_TEXT_ONLY_FIELDS = new Set(["address", "hours", "reviews"]);
+
+const TUNE_FIELD_LABELS = {
+    tagline: "Which tagline fits your brand best?",
+    positioning: "How should the site position your business?",
+    usp: "What makes you different from the competition?",
+    services: "Which services should the website feature?",
+    reviews: "Paste any real customer reviews you'd like on the site",
+    address: "What is your real business address?",
+    hours: "What are your opening hours?",
+    cta: "What should the main button ask visitors to do?",
+};
+
+const TUNE_PLACEHOLDERS = {
+    reviews: 'One review per line, e.g. "Best flat white in town." — Aditi S.',
+    address: "e.g. 12 Kalyani Nagar, Pune, Maharashtra 411006",
+    hours: "e.g. Mon-Sat 7am-9pm, Sunday 8am-5pm",
+};
+
+/** Minimal question set used when the LLM is unreachable or returns junk. */
+const buildFallbackTuneQuestions = () => ([
+    {
+        id: "tagline", field: "tagline", label: TUNE_FIELD_LABELS.tagline, type: "text",
+        options: [], allowCustom: true, placeholder: "e.g. Crafted fresh, every single morning",
+    },
+    {
+        id: "positioning", field: "positioning",
+        label: "Describe your business in one line — what you do and who for",
+        type: "text", options: [], allowCustom: true,
+        placeholder: "e.g. A neighbourhood cafe for remote workers who care about single-origin coffee",
+    },
+    {
+        id: "address", field: "address", label: TUNE_FIELD_LABELS.address, type: "text",
+        options: [], allowCustom: true, placeholder: TUNE_PLACEHOLDERS.address,
+    },
+]);
+
+/**
+ * Whitelist / coerce whatever the model returned into questions the UI can render.
+ * Anything malformed is dropped rather than patched, so a bad generation degrades to
+ * fewer questions instead of broken ones.
+ */
+const normalizeTuneQuestions = (raw) => {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+
+    for (const q of raw) {
+        if (!q || typeof q !== "object") continue;
+
+        const field = String(q.field || q.id || "").trim().toLowerCase();
+        if (!TUNE_FIELDS.includes(field) || seen.has(field)) continue;
+
+        let options = Array.isArray(q.options)
+            ? [...new Set(
+                q.options
+                    .filter((o) => typeof o === "string")
+                    .map((o) => o.trim().slice(0, 200))
+                    .filter(Boolean)
+            )].slice(0, 6)
+            : [];
+
+        let type = TUNE_TYPES.includes(q.type) ? q.type : "single";
+        if (TUNE_TEXT_ONLY_FIELDS.has(field)) type = "text";
+        // A one-option choice is not a choice — let the owner just write it.
+        if (type !== "text" && options.length < 2) type = "text";
+        if (type === "text") options = [];
+
+        const label = (typeof q.label === "string" && q.label.trim())
+            ? q.label.trim().slice(0, 160)
+            : TUNE_FIELD_LABELS[field];
+
+        out.push({
+            id: field,
+            field,
+            label,
+            type,
+            options,
+            allowCustom: true, // the owner can always overrule the AI's suggestions
+            placeholder: (typeof q.placeholder === "string" && q.placeholder.trim())
+                ? q.placeholder.trim().slice(0, 140)
+                : (TUNE_PLACEHOLDERS[field] || ""),
+        });
+        seen.add(field);
+        if (out.length >= 6) break;
+    }
+
+    // The whole point is to stop the model inventing a location, so always ask for one.
+    if (!seen.has("address")) {
+        if (out.length >= 6) out.pop();
+        out.push({
+            id: "address", field: "address", label: TUNE_FIELD_LABELS.address, type: "text",
+            options: [], allowCustom: true, placeholder: TUNE_PLACEHOLDERS.address,
+        });
+    }
+
+    return out;
+};
+
+/**
+ * POST /api/ai/tune-questions
+ * Turns a vague one-line concept into 4-6 high-value, business-specific questions with
+ * AI-generated answer options. Qwen (Ollama) first, Gemini fallback, hardcoded set last.
+ */
+export const generateTuneQuestions = async (req, res) => {
+    try {
+        const concept = (req.body.concept || "").trim();
+        if (!concept) return res.status(400).json({ success: false, message: "Concept is required." });
+
+        const tone = (req.body.tone || "").trim();
+        const audience = (req.body.audience || "").trim();
+        const businessType = (req.body.businessType || "").trim();
+
+        const prompt = `You are a brand strategist onboarding a new client. They described their business in one line and you must write their website. Ask only the FEW questions whose answers you genuinely cannot invent — the answers become the real copy on their site.
+
+CLIENT'S CONCEPT:
+"""${concept}"""
+${businessType ? `Business category: ${businessType}\n` : ""}${tone ? `Desired tone: ${tone}\n` : ""}${audience ? `Target audience: ${audience}\n` : ""}
+Return ONLY a JSON object (no prose, no markdown fences), exactly:
+{ "questions": [ { "id": "...", "field": "...", "label": "...", "type": "single|multi|text", "options": ["..."], "allowCustom": true, "placeholder": "..." } ] }
+
+RULES:
+1. Return 4 to 6 questions. A few great questions beat many shallow ones. NEVER ask about colors, fonts, templates or layout — those are chosen elsewhere.
+2. "field" MUST be one of ${JSON.stringify(TUNE_FIELDS)}, each used at most once:
+   - tagline: the slogan shown in the hero
+   - positioning: the brand's strategy / angle in the market
+   - usp: the one thing that makes them different
+   - services: what they actually sell
+   - reviews: real customer testimonials
+   - address: their real street address
+   - hours: their real opening hours
+   - cta: what the main button should ask visitors to do
+3. "type" is "single" (pick one), "multi" (pick several) or "text" (they type it).
+   - ALWAYS use "text" with EMPTY options for address, hours and reviews. Those are real-world facts; offering invented options would put a fake address or a fake review on a real business.
+   - Use "single" or "multi" for tagline, positioning, usp, services and cta, each with 4-6 options.
+4. Options must be CONCRETE and written specifically for THIS business — real candidate taglines, real service names. Never generic filler like "Option A", "Quality", "Good service" or "Professional".
+5. "label" is the question as you would say it to the client, under 90 characters.
+6. "placeholder" is a short example answer, and only for "text" questions.
+
+WORKED EXAMPLE — for the concept "a cozy neighbourhood coffee shop in Pune":
+{ "questions": [
+  { "id": "tagline", "field": "tagline", "label": "Which tagline fits your cafe best?", "type": "single",
+    "options": ["Your daily grind, perfected", "Pune's cosiest corner for coffee", "Slow mornings, strong brews", "Where the neighbourhood meets"], "allowCustom": true, "placeholder": "" },
+  { "id": "services", "field": "services", "label": "Which offerings should the site showcase?", "type": "multi",
+    "options": ["Single-origin pour overs", "Fresh-baked croissants", "All-day breakfast", "Cold brew on tap", "Latte art workshops", "Beans by the bag"], "allowCustom": true, "placeholder": "" },
+  { "id": "usp", "field": "usp", "label": "What makes your cafe different?", "type": "single",
+    "options": ["We roast our own beans in-house every week", "Laptop-friendly, with power at every table", "Everything baked fresh each morning on site", "Direct-trade beans from Chikmagalur farms"], "allowCustom": true, "placeholder": "" },
+  { "id": "address", "field": "address", "label": "What is your real cafe address?", "type": "text",
+    "options": [], "allowCustom": true, "placeholder": "e.g. 12 Kalyani Nagar, Pune, Maharashtra 411006" },
+  { "id": "reviews", "field": "reviews", "label": "Paste any real customer reviews to feature", "type": "text",
+    "options": [], "allowCustom": true, "placeholder": "One per line, e.g. Best flat white in Pune. - Aditi S." }
+] }
+
+Now do the same for the client's concept above. Every option must be unmistakably about THEIR business.`;
+
+        let text = "";
+        let usedModel = "qwen3.5:4b (Ollama)";
+        try {
+            const r = await ollamaClient.chat({
+                model: 'qwen3.5:4b',
+                think: false,
+                messages: [
+                    { role: 'system', content: 'You are a precise brand-onboarding engine. You output only strict, valid JSON.' },
+                    { role: 'user', content: prompt }
+                ],
+                format: 'json',
+                options: { num_predict: 1400, num_ctx: 8192, temperature: 0.6 }
+            });
+            text = r.message.content || "";
+        } catch (ollamaErr) {
+            console.warn("⚠️ [AI Tuner] Ollama failed, falling back to Gemini:", ollamaErr.message);
+            usedModel = "gemini-3-flash-preview";
+            const result = await model.generateContent(prompt);
+            text = result.response.text();
+        }
+
+        // Extract JSON (handle markdown fences / surrounding prose)
+        let jsonStr = text;
+        const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fence) jsonStr = fence[1];
+        else { const obj = text.match(/\{[\s\S]*\}/); if (obj) jsonStr = obj[0]; }
+
+        let parsed = {};
+        try { parsed = JSON.parse(jsonStr.trim()); } catch { parsed = {}; }
+
+        // The model occasionally returns a bare array instead of { questions: [...] }
+        let questions = normalizeTuneQuestions(Array.isArray(parsed) ? parsed : parsed?.questions);
+
+        if (questions.length < 2) {
+            console.warn("⚠️ [AI Tuner] Unusable question set — serving fallback.");
+            questions = buildFallbackTuneQuestions();
+            usedModel = `${usedModel} (fallback)`;
+        }
+
+        return res.json({ success: true, questions, model: usedModel });
+    } catch (err) {
+        console.error("❌ [AI Tuner] error:", err);
+        // Never block the user: a working question set matters more than surfacing the error.
+        return res.json({ success: true, questions: buildFallbackTuneQuestions(), model: "fallback" });
+    }
+};
+
 /**
  * POST /api/public/ai/chat
  */
@@ -1204,7 +1499,8 @@ export const chatWithWebsite = async (req, res) => {
             return res.status(400).json({ success: false, message: "Missing question or websiteId" });
         }
 
-        const pages = await Page.find({ websiteId }).lean();
+        // Public endpoint: answer only from published pages, never from drafts.
+        const pages = await Page.find({ websiteId, status: "published" }).lean();
         if (!pages || pages.length === 0) {
             return res.status(404).json({ success: false, message: "Website not found or has no content" });
         }
@@ -1264,7 +1560,8 @@ ${siteContext}
             return res.json({ success: true, answer });
         } catch (ollamaErr) {
             console.warn("⚠️ [AI Chat] Ollama failure, falling back to Gemini...");
-            const result = await model.generateContent(systemPrompt + "\\n\\nUser Question: " + question);
+            // Visitor input leaves the host here, so strip contact identifiers first.
+            const result = await model.generateContent(systemPrompt + "\\n\\nUser Question: " + redactText(question));
             const answer = result.response.text();
             console.log("🔵 [AI Chat] Answer generated via Gemini.");
             return res.json({ success: true, answer });
@@ -1314,7 +1611,8 @@ export const helpAssistant = async (req, res) => {
             });
             return res.json({ success: true, answer: r.message?.content || "" });
         } catch (e) {
-            const result = await model.generateContent(prompt);
+            const cloudPrompt = `${HELP_KNOWLEDGE}\n\nThe user is currently on the ${where || "app"}.\n\nUser question: ${redactText(question)}`;
+            const result = await model.generateContent(cloudPrompt);
             return res.json({ success: true, answer: result.response.text() });
         }
     } catch (err) {

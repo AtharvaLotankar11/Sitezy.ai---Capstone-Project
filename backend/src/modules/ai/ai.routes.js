@@ -1,5 +1,5 @@
 import express from "express";
-import { generateLayout, getAILogs, autoConfigureFromPrompt, helpAssistant } from "./ai.controller.js";
+import { generateLayout, getAILogs, autoConfigureFromPrompt, generateTuneQuestions, helpAssistant } from "./ai.controller.js";
 import { scoreSeo, autoImproveSeo, designHealth, suggestEngagement, generateSeoMeta } from "./seo.controller.js";
 import { authChain, requireRole } from "../../middleware/auth.middleware.js";
 
@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.post("/generate-website", authChain, requireRole("OWNER", "ADMIN", "DEVELOPER"), generateLayout);
 router.post("/auto-configure", authChain, requireRole("OWNER", "ADMIN", "DEVELOPER"), autoConfigureFromPrompt);
+router.post("/tune-questions", authChain, requireRole("OWNER", "ADMIN", "DEVELOPER"), generateTuneQuestions);
 
 // ── DL SEO / design / engagement ──
 router.post("/seo/score", authChain, requireRole("OWNER", "ADMIN", "DEVELOPER"), scoreSeo);
