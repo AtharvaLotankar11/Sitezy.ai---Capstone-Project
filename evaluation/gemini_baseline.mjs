@@ -97,7 +97,15 @@ function extractAndValidate(text) {
   if (parse_ok) { schema_ok = !aiLayoutSchema.validate(parsed).error; n_pages = Array.isArray(parsed?.pages) ? parsed.pages.length : 0; }
   return { parse_ok, schema_ok, n_pages };
 }
-const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-3-flash-preview" });
+// GEMINI_MATCHED=1: same constraints as the local call (system message, JSON mode,
+// temperature 0.1, 5,000-token output budget) instead of the production cloud path;
+// GEMINI_NOCAP=1 additionally drops the token budget.
+const SYSTEM = "You are an expert AI website generator and elite copywriter. You MUST generate unique, engaging content perfectly tailored to the requested business type. NEVER blindly copy placeholder text from templates.";
+const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel(process.env.GEMINI_MATCHED
+  ? { model: "gemini-3-flash-preview", systemInstruction: SYSTEM,
+      generationConfig: { responseMimeType: "application/json", temperature: 0.1,
+                          ...(process.env.GEMINI_NOCAP ? {} : { maxOutputTokens: 5000 }) } }
+  : { model: "gemini-3-flash-preview" });
 const done = new Set(fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).biz_idx) : []);
 for (let i = 0; i < BUSINESSES.length; i++) {
   if (done.has(i)) continue;

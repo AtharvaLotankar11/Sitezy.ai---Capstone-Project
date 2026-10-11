@@ -9,7 +9,10 @@ import { pathToFileURL, fileURLToPath } from "url";
 const BACKEND = fileURLToPath(new URL("../backend", import.meta.url)).replace(/[\\/]+$/, "").split("\\").join("/");
 const SP = process.argv[2];
 const { repairForms, validFields } = await import(pathToFileURL(BACKEND + "/src/modules/ai/formRepair.js").href);
-const BUSINESSES = JSON.parse(fs.readFileSync(`${SP}/businesses.json`, "utf8"));
+// the business list is taken from decoding_exp.mjs so all experiments use identical inputs
+const exp = fs.readFileSync(new URL("./decoding_exp.mjs", import.meta.url), "utf8");
+const bA = exp.indexOf("const BUSINESSES = ["), bB = exp.indexOf("];", bA) + 1;
+const BUSINESSES = new Function(exp.slice(bA, bB) + "; return BUSINESSES;")();
 const EXAMPLE = new Set(["customer_name", "phone", "juice_type", "size", "quantity", "add_ons", "delivery_time",
   "special_instructions", "name", "service", "stylist", "appointment_date", "notes"]);
 
@@ -41,7 +44,8 @@ for (const dir of runs) {
     out.push({ run: path.basename(dir), biz, forms: after.length, filled_before: before.filter(Boolean).length,
       filled_after: after.filter(filled).length, ...stats,
       fields_after: after.map((s) => s.props.dynamicFields.length),
-      example_overlap: names.length ? names.filter((n) => EXAMPLE.has(n)).length / names.length : 0 });
+      example_overlap: names.length ? names.filter((n) => EXAMPLE.has(n)).length / names.length : 0,
+      ...(process.env.FR_SAVE ? { forms_after: after.map((s) => s.props.dynamicFields), forms_before: before } : {}) });
     process.stdout.write(".");
   }
 }

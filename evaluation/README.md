@@ -80,6 +80,29 @@ Run from `evaluation/` after steps 1–5 above, with all outputs in `out/`:
   (`out/gemini_rep2.jsonl`, produced by `node gemini_baseline.mjs out/gemini_rep2.jsonl`) and the
   three form-repair outputs above, so run it last.
 
+## Strengthening experiments (camera-ready)
+
+- Third decoding run: `node decoding_exp.mjs out/decoding_rep3.jsonl 1680000 D_both,C_formatjson`.
+- Matched cloud baseline: `GEMINI_MATCHED=1 node gemini_baseline.mjs out/gemini_matched.jsonl`
+  (system message, JSON mode, temperature 0.1 and the local 5,000-token budget);
+  add `GEMINI_NOCAP=1` to drop the token budget.
+- Retry policies: `node deploy_policy_eval.mjs out` compares the deployed DiagnosingAgent
+  policy with no retry and blind retry on the same 42 injected faults (Firebase test project;
+  deployment-log writes are stubbed, all test data is deleted and the deletion verified).
+- Counterfactual arm: `python cf_arm.py` applies the top reorder suggestion to every benchmark
+  page and reports predicted Δp plus the design and SEO rubric before/after.
+- Field rules: `node field_rules.mjs local=out/decoding_results_raw:_D_both.txt
+  cloud=out/gemini_results_raw:_gemini.txt --repaired=out/form_repair_results_saved.json`
+  (run from `evaluation/`; per field type: conformance, required flag, select options,
+  type/name consistency). Produce the `--repaired` file with
+  `FR_SAVE=1 FR_OUT=form_repair_results_saved.json node form_repair_eval.mjs out ...`.
+- Block-recommender arm: write the recommender's blocks for the 20 businesses (the
+  `/generate-layout` endpoint of `ai_engine/ai_service.py`, mapped as in `generateLayout`) to
+  `out/recommender_features.json`, then
+  `FEATURES_FILE=out/recommender_features.json FEATURES_KEY=features_final node decoding_exp.mjs out/recommender2_gen.jsonl 1680000 D_both`,
+  `node recommender_fallbacks.mjs out`, form repair on `out/recommender2_gen_raw`, and
+  `python e2e_ablation.py 1500 recommender`.
+
 ## Deployment pipeline and tenant isolation (no GPU)
 
 Both need `npm install mongodb-memory-server@10` in `evaluation/` (downloads a MongoDB

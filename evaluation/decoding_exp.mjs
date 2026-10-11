@@ -70,11 +70,14 @@ const BUSINESSES = [
   ["modern co-working space", "modern", "freelancers"],
 ];
 const FEATURES = ["Navbar", "Hero", "Text", "Gallery", "CTA", "DynamicForm", "Footer"];
+const PER_BIZ = process.env.FEATURES_FILE
+  ? JSON.parse(fs.readFileSync(process.env.FEATURES_FILE, "utf8")).map((r) => r[process.env.FEATURES_KEY || "features"]) : null;
 
 // Same template literal as generateLayout (no base template, no brand facts, Light theme).
-function buildPrompt(businessType, tone, targetAudience) {
+function buildPrompt(businessType, tone, targetAudience, i) {
   const contextImages = getContextQueries(businessType).slice(0, 5).join(" | ");
-  const features = FEATURES;
+  // FEATURES_FILE: per-business section lists (e.g. from the block recommender) instead of all seven
+  const features = PER_BIZ ? PER_BIZ[i] : FEATURES;
   const theme = undefined, baseTemplateSections = undefined, brandFactsBlock = "", brandDetails = undefined;
   const primaryColor = undefined, secondaryColor = undefined;
   return fs.readFileSync(new URL("./prompt_template.txt", import.meta.url), "utf8")
@@ -139,7 +142,7 @@ for (let i = 0; i < BUSINESSES.length; i++) {
     const [bt, tone, aud] = BUSINESSES[i];
     const body = {
       model: "qwen3.5:4b", stream: false, think: cfg.think,
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: buildPrompt(bt, tone, aud) }],
+      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: buildPrompt(bt, tone, aud, i) }],
       options: { num_predict: 5000, num_ctx: 8192, temperature: 0.1 },
     };
     if (cfg.format) body.format = cfg.format;

@@ -708,15 +708,33 @@ export const generateLayout = async (req, res) => {
 
         product_grid: "Gallery",
 
-        booking_section: "ContactForm"
+        booking_section: "ContactForm",
+
+        // Blocks without a dedicated builder section map to the closest one; the block
+        // name travels with it as a content hint (previously these were silently dropped).
+        service_cards: "Gallery",
+        pricing_table: "Gallery",
+        team_section: "Gallery",
+        faq: "Text",
+        stats_counter: "Text",
+        blog_preview: "Text",
+        newsletter: "CTA"
     };
 
 
-    // Convert ML output → builder section list
+    // Convert ML output → builder section list; approximate mappings keep the block
+    // name as a hint, e.g. "Gallery (pricing table)"
 
+    const approximate = new Set(["testimonials", "product_grid", "booking_section", "service_cards",
+        "pricing_table", "team_section", "faq", "stats_counter", "blog_preview", "newsletter"]);
     const mlFeatures = recommendedSections
-        .map(section => sectionMapping[section])
-        .filter(Boolean);
+        .filter(section => sectionMapping[section])
+        .map(section => approximate.has(section)
+            ? `${sectionMapping[section]} (${section.replace(/_/g, " ")})`
+            : sectionMapping[section]);
+    // The prompt requires an order form on every home page; the recommender's vocabulary
+    // has no such block, so request it explicitly (otherwise a contact form replaces it).
+    if (mlFeatures.length > 0 && !mlFeatures.includes("DynamicForm")) mlFeatures.push("DynamicForm");
 
 
     // ==========================================

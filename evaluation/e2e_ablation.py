@@ -20,6 +20,8 @@ ARMS = {  # arm: (site files glob, gate, scorer)
     "full_rerun":    (os.path.join(SP, "decoding_results_raw", "*_D_both.txt"), True, "mlp"),
     # routing ablation: the scoring/gating step is routed to the Tier-2 LLM instead of the Tier-1 model
     "llm_scorer":    (os.path.join(SP, "decoding_results_raw", "*_D_both.txt"), True, "llm"),
+    # recommender on: sections requested from the block recommender (fixed mapping) instead of all seven
+    "recommender":   (os.path.join(SP, "recommender_gen_raw", "*_D_both.txt"), True, "mlp"),
 }
 ONLY = sys.argv[2].split(",") if len(sys.argv) > 2 else None
 SCORE_T = [0.0]                              # time spent in LLM scoring calls (llm_scorer arm)
