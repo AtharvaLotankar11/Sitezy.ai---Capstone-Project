@@ -34,7 +34,8 @@ import { fetchWebsites } from "../../store/slices/websiteSlice.js";
 import toast from "react-hot-toast";
 import {
     Wand2, Sparkles, Loader2, CheckCircle,
-    Code2, Eye, ChevronDown, ChevronRight, LayoutTemplate, Globe, Mic, ArrowRight
+    Code2, Eye, ChevronDown, ChevronRight, LayoutTemplate, Globe, Mic, ArrowRight,
+    SlidersHorizontal, X
 } from "lucide-react";
 import { SECTION_MAP } from "../publicSite/PublicSiteRenderer.jsx";
 import { updateTenantBranding } from "../../store/slices/authSlice.js";
@@ -170,6 +171,7 @@ export default function AIGeneratorPage() {
         baseTemplateSections: null,
         websitePurpose: "Build brand",   // new — Website Purpose dropdown
         selectedTemplateName: null,       // tracks template name for ML business_type mapping
+        brandDetails: {},                 // confirmed facts from the Prompt Tuner
     });
     const [loading, setLoading] = useState(false);
     const [mlPredicting, setMlPredicting] = useState(false);
@@ -182,6 +184,13 @@ export default function AIGeneratorPage() {
     const [isListening, setIsListening] = useState(false);
     const [previewId, setPreviewId] = useState(null); // template id shown in the live-preview modal
     const [autoConfiguring, setAutoConfiguring] = useState(false); // AI is picking template/colors/tone/etc.
+    // ── Prompt Tuner: AI-written, business-specific questions answered before generating ──
+    const [tuneOpen, setTuneOpen] = useState(false);
+    const [tuneLoading, setTuneLoading] = useState(false);
+    const [tuneQuestions, setTuneQuestions] = useState([]);
+    const [tuneAnswers, setTuneAnswers] = useState({});   // field → string | string[]
+    const [tuneCustom, setTuneCustom] = useState({});     // field → "Other…" free text
+    const [tuneConcept, setTuneConcept] = useState("");   // concept the questions were written for
     const mlDebounceRef = useRef(null);
     const mlTimerRef = useRef(null);
 
@@ -369,6 +378,83 @@ export default function AIGeneratorPage() {
         }
     };
 
+    // ── Prompt Tuner ──────────────────────────────────────────────────────────
+    // Asks the AI for a handful of questions specific to THIS business, so the
+    // generated copy carries the owner's real tagline, address and reviews.
+    const TUNE_FIELD_TITLES = {
+        tagline: "Tagline", positioning: "Positioning", usp: "Differentiator",
+        services: "Services", reviews: "Reviews", address: "Address",
+        hours: "Opening hours", cta: "Call to action",
+    };
+
+    const loadTuneQuestions = async (concept) => {
+        setTuneLoading(true);
+        try {
+            const res = await api.post("/ai/tune-questions", {
+                concept,
+                businessType: TEMPLATE_TO_BUSINESS_TYPE[form.selectedTemplateName] || "",
+                tone: form.tone,
+                audience: form.targetAudience,
+            });
+            const qs = Array.isArray(res.data?.questions) ? res.data.questions : [];
+            if (qs.length === 0) throw new Error("No questions returned");
+            setTuneQuestions(qs);
+            setTuneConcept(concept);
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Couldn't build the questions. Is the AI service running?");
+            setTuneOpen(false);
+        } finally {
+            setTuneLoading(false);
+        }
+    };
+
+    const handleOpenTuner = async (forceNew = false) => {
+        const concept = form.businessType.trim();
+        if (!concept) { toast.error("Describe your concept first, then tune it."); return; }
+        setTuneOpen(true);
+        // Reuse the existing set (and the answers already given) unless the concept changed
+        if (!forceNew && tuneQuestions.length > 0 && tuneConcept === concept) return;
+        await loadTuneQuestions(concept);
+    };
+
+    const pickTuneOption = (field, opt) =>
+        setTuneAnswers((p) => ({ ...p, [field]: p[field] === opt ? "" : opt }));
+
+    const toggleTuneOption = (field, opt) =>
+        setTuneAnswers((p) => {
+            const cur = Array.isArray(p[field]) ? p[field] : [];
+            return { ...p, [field]: cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt] };
+        });
+
+    // Collapse the per-question answers into the flat { field: value } map the backend expects.
+    const collapseTuneAnswers = () => {
+        const details = {};
+        for (const q of tuneQuestions) {
+            const custom = (tuneCustom[q.field] || "").trim();
+            const ans = tuneAnswers[q.field];
+            if (q.type === "multi") {
+                const picked = Array.isArray(ans) ? ans.filter(Boolean) : [];
+                const all = custom ? [...picked, custom] : picked;
+                if (all.length) details[q.field] = all;
+            } else {
+                // A custom answer overrides the AI's suggestions
+                const v = custom || (typeof ans === "string" ? ans.trim() : "");
+                if (v) details[q.field] = v;
+            }
+        }
+        return details;
+    };
+
+    const handleApplyTune = () => {
+        const details = collapseTuneAnswers();
+        setForm((p) => ({ ...p, brandDetails: details }));
+        setTuneOpen(false);
+        const n = Object.keys(details).length;
+        toast.success(n ? `Tuned ✨ ${n} brand fact${n > 1 ? "s" : ""} will be used verbatim` : "Tuning cleared — AI will write everything itself");
+    };
+
+    const tunedFields = Object.keys(form.brandDetails || {});
+
     const handleGenerate = async (e, preferredModel = 'qwen') => {
         if (e) e.preventDefault();
         if (!form.businessType) return toast.error("Please describe your business");
@@ -497,7 +583,7 @@ export default function AIGeneratorPage() {
                                             placeholder={inputLanguage === 'hi' ? "उदाहरण: एक आधुनिक स्टार्टअप जो स्लीक एआई एजेंट बनाता है..." : inputLanguage === 'mr' ? "उदाहरण: आधुनिक एआय एजंट्स तयार करणारी स्टार्टअप..." : "e.g. A futuristic startup building smart AI agents with a sleek, dark aesthetic..."}
                                             required style={{ ...inputStyle, resize: "none", lineHeight: 1.6, paddingBottom: 52, height: "100%", minHeight: 170 }} />
                                         {/* Inline action row — voice + AI auto-configure, right-aligned like a chat composer's send */}
-                                        <div style={{ position: "absolute", right: 12, bottom: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                                        <div style={{ position: "absolute", left: 12, right: 12, bottom: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
                                             <button
                                                 type="button"
                                                 onClick={handleVoiceInput}
@@ -510,6 +596,25 @@ export default function AIGeneratorPage() {
                                                     animation: isListening ? "pulse-glow 1.5s infinite" : "none"
                                                 }}>
                                                 <Mic size={15} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenTuner(false)}
+                                                disabled={!form.businessType.trim()}
+                                                title="Answer a few AI-written questions about your business so the site uses your real tagline, address and reviews"
+                                                style={{
+                                                    display: "inline-flex", alignItems: "center", gap: 7,
+                                                    padding: "7px 14px", borderRadius: 100,
+                                                    border: tunedFields.length ? "1px solid rgba(16,185,129,0.45)" : "1px solid rgba(139,92,246,0.35)",
+                                                    background: tunedFields.length ? "rgba(16,185,129,0.12)" : "rgba(139,92,246,0.12)",
+                                                    color: tunedFields.length ? "#10b981" : "#a78bfa",
+                                                    fontSize: 12.5, fontWeight: 600, fontFamily: "var(--font-display)",
+                                                    cursor: !form.businessType.trim() ? "not-allowed" : "pointer",
+                                                    opacity: !form.businessType.trim() ? 0.5 : 1, transition: "all 0.15s ease", whiteSpace: "nowrap",
+                                                }}>
+                                                {tunedFields.length
+                                                    ? <><CheckCircle size={14} strokeWidth={2.5} /> Tuned · {tunedFields.length}</>
+                                                    : <><SlidersHorizontal size={14} strokeWidth={2.5} /> Tune with AI</>}
                                             </button>
                                             <button
                                                 type="button"
@@ -534,6 +639,20 @@ export default function AIGeneratorPage() {
                                         <div style={{ fontSize: 11, color: "var(--text-accent)", marginTop: 6, display: "flex", gap: 4, alignItems: "center" }}>
                                             <Globe size={12} />
                                             <span>Text will be translated to English locally via Browser AI before generating.</span>
+                                        </div>
+                                    )}
+                                    {/* Facts locked in by the tuner — click any chip to edit them */}
+                                    {tunedFields.length > 0 && (
+                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+                                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Using your own</span>
+                                            {tunedFields.map((f) => (
+                                                <button key={f} type="button" onClick={() => handleOpenTuner(false)} title="Edit tuned answers" style={{
+                                                    fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 100, cursor: "pointer",
+                                                    background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.25)",
+                                                }}>
+                                                    {TUNE_FIELD_TITLES[f] || f}
+                                                </button>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -818,6 +937,130 @@ export default function AIGeneratorPage() {
                     </div>
                 </div>
             </div>
+
+            {/* ── Prompt Tuner modal — AI-written questions about the user's actual business ── */}
+            {tuneOpen && (() => {
+                const answered = Object.keys(collapseTuneAnswers()).length;
+                return createPortal((
+                    <div onClick={() => setTuneOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(5,8,12,0.8)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+                        <div onClick={(e) => e.stopPropagation()} style={{ width: "min(760px, 94vw)", maxHeight: "90vh", background: "var(--bg-card, #0d1117)", borderRadius: 20, border: "1px solid rgba(var(--fg),0.12)", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 40px 100px rgba(0,0,0,0.6)" }}>
+
+                            {/* Header */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "18px 22px", borderBottom: "1px solid rgba(var(--fg),0.08)", flexShrink: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(139,92,246,0.14)", border: "1px solid rgba(139,92,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                        <SlidersHorizontal size={18} style={{ color: "#a78bfa" }} />
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, fontSize: 16.5, color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>Tune your website content</div>
+                                        <div style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                            {tuneLoading ? "Writing questions for your business…" : "Your answers are used word for word — anything you skip, the AI writes itself."}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                                    <button type="button" onClick={() => handleOpenTuner(true)} disabled={tuneLoading} title="Ask the AI for a different set of questions"
+                                        style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(var(--fg),0.12)", background: "rgba(var(--fg),0.04)", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: tuneLoading ? "not-allowed" : "pointer", opacity: tuneLoading ? 0.5 : 1, whiteSpace: "nowrap" }}>
+                                        New questions
+                                    </button>
+                                    <button type="button" onClick={() => setTuneOpen(false)} title="Close"
+                                        style={{ width: 38, height: 38, borderRadius: 10, border: "1px solid rgba(var(--fg),0.12)", background: "rgba(var(--fg),0.04)", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <X size={17} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Questions */}
+                            <div style={{ flex: 1, overflowY: "auto", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 20 }}>
+                                {tuneLoading ? (
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: "70px 0", color: "var(--text-muted)" }}>
+                                        <Loader2 size={30} className="animate-spin" style={{ color: "#a78bfa" }} />
+                                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>Studying your concept…</div>
+                                        <div style={{ fontSize: 12.5, textAlign: "center", maxWidth: 380, lineHeight: 1.6 }}>
+                                            The AI is writing questions — and candidate answers — specific to your business. This takes a few seconds.
+                                        </div>
+                                    </div>
+                                ) : tuneQuestions.map((q, qi) => {
+                                    const ans = tuneAnswers[q.field];
+                                    const selected = Array.isArray(ans) ? ans : (ans ? [ans] : []);
+                                    return (
+                                        <div key={q.id || q.field} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                            <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{String(qi + 1).padStart(2, "0")}</span>
+                                                <div style={{ minWidth: 0 }}>
+                                                    <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--text-primary)", lineHeight: 1.45 }}>{q.label}</div>
+                                                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
+                                                        {q.type === "multi" ? "Pick as many as apply" : q.type === "single" ? "Pick one, or write your own" : "Optional — leave blank to let the AI decide"}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {q.type === "text" ? (
+                                                <textarea
+                                                    value={typeof ans === "string" ? ans : ""}
+                                                    onChange={(e) => setTuneAnswers((p) => ({ ...p, [q.field]: e.target.value }))}
+                                                    placeholder={q.placeholder || ""}
+                                                    rows={q.field === "reviews" ? 4 : 2}
+                                                    style={{ ...inputStyle, padding: "11px 14px", fontSize: 14, resize: "vertical", lineHeight: 1.55 }}
+                                                />
+                                            ) : (
+                                                <>
+                                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                                        {q.options.map((opt) => {
+                                                            const sel = selected.includes(opt);
+                                                            return (
+                                                                <button key={opt} type="button"
+                                                                    onClick={() => (q.type === "multi" ? toggleTuneOption(q.field, opt) : pickTuneOption(q.field, opt))}
+                                                                    style={{
+                                                                        display: "flex", alignItems: "center", gap: 7, textAlign: "left",
+                                                                        padding: "9px 15px", borderRadius: 100, fontSize: 13.5, fontWeight: 600,
+                                                                        background: sel ? "var(--grad-btn)" : "var(--bg-input)",
+                                                                        border: sel ? "1px solid rgba(var(--fg),0.12)" : "1px solid var(--border-color)",
+                                                                        color: sel ? "#fff" : "var(--text-secondary)",
+                                                                        cursor: "pointer", transition: "all 0.15s ease",
+                                                                        boxShadow: sel ? "0 4px 12px rgba(8,90,72,0.35)" : "none",
+                                                                    }}>
+                                                                    {sel && <CheckCircle size={13} strokeWidth={3} />}
+                                                                    {opt}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    {q.allowCustom && (
+                                                        <input
+                                                            value={tuneCustom[q.field] || ""}
+                                                            onChange={(e) => setTuneCustom((p) => ({ ...p, [q.field]: e.target.value }))}
+                                                            placeholder={q.type === "multi" ? "Other… (added to your picks)" : "Other… (used instead of the options above)"}
+                                                            style={{ ...inputStyle, padding: "10px 14px", fontSize: 13.5 }}
+                                                        />
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Footer */}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 22px", borderTop: "1px solid rgba(var(--fg),0.08)", flexShrink: 0, background: "rgba(var(--fg),0.02)" }}>
+                                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                                    {answered} of {tuneQuestions.length} answered
+                                </span>
+                                <div style={{ display: "flex", gap: 10 }}>
+                                    <button type="button" onClick={() => { setTuneAnswers({}); setTuneCustom({}); setForm((p) => ({ ...p, brandDetails: {} })); setTuneOpen(false); toast("Skipped tuning — the AI will write everything", { icon: "✏️" }); }}
+                                        style={{ padding: "11px 18px", borderRadius: 12, border: "1px solid rgba(var(--fg),0.12)", background: "rgba(var(--fg),0.04)", color: "var(--text-secondary)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                                        Skip
+                                    </button>
+                                    <button type="button" onClick={handleApplyTune} disabled={tuneLoading} className="saas-button"
+                                        style={{ padding: "11px 22px", borderRadius: 12, fontSize: 14.5, opacity: tuneLoading ? 0.6 : 1, cursor: tuneLoading ? "not-allowed" : "pointer" }}>
+                                        <CheckCircle size={17} strokeWidth={2.5} /> Apply to my website
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ), document.body);
+            })()}
 
             {/* ── Live template preview modal (portaled to body to escape the layout stacking context) ── */}
             {previewId && (() => {
