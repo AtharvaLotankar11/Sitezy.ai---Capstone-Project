@@ -21,7 +21,7 @@ function Gauge100({ value, label }) {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{
                 width: 76, height: 76, borderRadius: "50%", flexShrink: 0,
-                background: `conic-gradient(${c} ${value * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
+                background: `conic-gradient(${c} ${value * 3.6}deg, rgba(var(--fg),0.08) 0deg)`,
                 display: "flex", alignItems: "center", justifyContent: "center",
             }}>
                 <div style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--bg-surface)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
@@ -68,6 +68,7 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
     const [improving, setImproving] = useState(false);
     const [improve, setImprove] = useState(null);
     const [applying, setApplying] = useState(false);
+    const [metaGen, setMetaGen] = useState(false);
     const [engLoading, setEngLoading] = useState(false);
     const [eng, setEng] = useState(null);
     const [dLoading, setDLoading] = useState(false);
@@ -93,6 +94,16 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
             setImprove(r.data);
             if (!r.data.improved) toast("No changes needed — already strong, or nothing to safely rewrite.", { icon: "✨" });
         } catch (e) { handleErr(e); } finally { setImproving(false); }
+    };
+
+    const generateMeta = async () => {
+        setMetaGen(true);
+        try {
+            const r = await api.post("/ai/seo/generate-meta", body());
+            setSeo({ score: r.data.score, factors: r.data.factors, keyword: r.data.keyword });
+            setImprove(null);
+            toast.success("Meta description & structured data generated ✓");
+        } catch (e) { handleErr(e); } finally { setMetaGen(false); }
     };
 
     const applyImprove = async () => {
@@ -160,30 +171,36 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
             {/* Header */}
             <div style={{ padding: "15px 18px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Gauge size={15} style={{ color: "#5eead4" }} />
+                    <Gauge size={15} style={{ color: "var(--text-accent)" }} />
                     <h3 style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>SEO &amp; Insights</h3>
                 </div>
-                <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", padding: 4 }}><X size={16} /></button>
+                <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--fg),0.4)", padding: 4 }}><X size={16} /></button>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto" }}>
                 {/* ── SEO ── */}
-                <Section icon={<Gauge size={14} style={{ color: "#5eead4" }} />} title="SEO Score">
+                <Section icon={<Gauge size={14} style={{ color: "var(--text-accent)" }} />} title="SEO Score">
                     <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                         <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Target keyword (optional)"
                             style={{ flex: 1, padding: "9px 12px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-color)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
                     </div>
-                    <button onClick={analyze} disabled={analyzing} style={btn("var(--bg-input)", "#5eead4", "1px solid rgba(20,184,166,0.3)")}>
+                    <button onClick={analyze} disabled={analyzing} style={btn("var(--bg-input)", "var(--text-accent)", "1px solid rgba(20,184,166,0.3)")}>
                         {analyzing ? <><Loader2 size={14} className="animate-spin" /> Analyzing…</> : <><Gauge size={14} /> Analyze Page</>}
                     </button>
 
                     {seo && (
                         <div style={{ marginTop: 16 }}>
                             <Gauge100 value={seo.score} label={`${goodCount} of ${seo.factors?.length || 0} checks passing`} />
+                            {seo.keyword && (
+                                <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-muted)" }}>
+                                    {seo.keywordDerived ? "Auto-detected keyword: " : "Target keyword: "}
+                                    <span style={{ color: "var(--text-accent)", fontWeight: 700 }}>{seo.keyword}</span>
+                                </div>
+                            )}
                             <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
                                 {weakFactors.length === 0 && <p style={{ fontSize: 12.5, color: "#34d399" }}>All checks look good. 🎉</p>}
                                 {weakFactors.map((f) => (
-                                    <div key={f.key} style={{ display: "flex", gap: 9, padding: "9px 11px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                                    <div key={f.key} style={{ display: "flex", gap: 9, padding: "9px 11px", borderRadius: 10, background: "rgba(var(--fg),0.03)", border: "1px solid rgba(var(--fg),0.05)" }}>
                                         <span style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COLOR[f.status], marginTop: 5, flexShrink: 0 }} />
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>{f.label}</div>
@@ -194,9 +211,14 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
                             </div>
 
                             {!improve && (
-                                <button onClick={autoImprove} disabled={improving} className="saas-button" style={{ ...btn("var(--grad-btn)", "#fff"), marginTop: 14 }}>
-                                    {improving ? <><Loader2 size={14} className="animate-spin" /> AI rewriting…</> : <><Sparkles size={14} /> Auto-Improve with AI</>}
-                                </button>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+                                    <button onClick={autoImprove} disabled={improving} className="saas-button" style={btn("var(--grad-btn)", "#fff")}>
+                                        {improving ? <><Loader2 size={14} className="animate-spin" /> AI rewriting…</> : <><Sparkles size={14} /> Auto-Improve with AI</>}
+                                    </button>
+                                    <button onClick={generateMeta} disabled={metaGen} style={btn("var(--bg-input)", "var(--text-accent)", "1px solid rgba(20,184,166,0.3)")}>
+                                        {metaGen ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><Check size={14} /> Generate meta &amp; schema</>}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     )}
@@ -208,22 +230,29 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
                                 <span style={{ fontSize: 20, fontWeight: 800, color: scoreColor(improve.before.score), fontFamily: "var(--font-display)" }}>{Math.round(improve.before.score)}</span>
                                 <ArrowRight size={15} style={{ color: "var(--text-muted)" }} />
                                 <span style={{ fontSize: 20, fontWeight: 800, color: scoreColor(improve.after.score), fontFamily: "var(--font-display)" }}>{Math.round(improve.after.score)}</span>
-                                <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>via {String(improve.model).split(" ")[0]}</span>
+                                <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>AI-assisted</span>
                             </div>
-                            {(improve.steps || []).flatMap((s) => s.changes).length === 0 && (
-                                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No safe rewrites were found for this page.</p>
+                            {!improve.improved && (
+                                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Your page already looks good — no further safe improvements were found.</p>
                             )}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
-                                {(improve.steps || []).flatMap((s) => s.changes).map((c, i) => (
-                                    <div key={i} style={{ padding: "8px 10px", borderRadius: 9, background: "rgba(0,0,0,0.2)" }}>
-                                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 4 }}>{c.type} · {c.propKey}</div>
-                                        <div style={{ fontSize: 11.5, color: "#f87171", textDecoration: "line-through", opacity: 0.7, lineHeight: 1.4 }}>{c.before}</div>
-                                        <div style={{ fontSize: 12, color: "#34d399", lineHeight: 1.45, marginTop: 3 }}>{c.after}</div>
-                                    </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 240, overflowY: "auto" }}>
+                                {(improve.steps || []).map((step, si) => (
+                                    step.meta ? (
+                                        <div key={`m${si}`} style={{ display: "flex", gap: 8, padding: "9px 10px", borderRadius: 9, background: "rgba(20,184,166,0.08)", border: "1px solid rgba(20,184,166,0.2)" }}>
+                                            <Check size={14} style={{ color: "#34d399", marginTop: 1, flexShrink: 0 }} />
+                                            <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{step.label}</span>
+                                        </div>
+                                    ) : (step.changes || []).map((c, i) => (
+                                        <div key={`${si}-${i}`} style={{ padding: "8px 10px", borderRadius: 9, background: "rgba(0,0,0,0.2)" }}>
+                                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 4 }}>{c.type} · {c.propKey}</div>
+                                            <div style={{ fontSize: 11.5, color: "#f87171", textDecoration: "line-through", opacity: 0.7, lineHeight: 1.4 }}>{c.before}</div>
+                                            <div style={{ fontSize: 12, color: "#34d399", lineHeight: 1.45, marginTop: 3 }}>{c.after}</div>
+                                        </div>
+                                    ))
                                 ))}
                             </div>
                             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                                <button onClick={applyImprove} disabled={applying || !(improve.steps || []).flatMap((s) => s.changes).length} style={btn("#0d9488", "#fff")}>
+                                <button onClick={applyImprove} disabled={applying} style={btn("#0d9488", "#fff")}>
                                     {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Apply
                                 </button>
                                 <button onClick={() => setImprove(null)} style={{ ...btn("var(--bg-input)", "var(--text-secondary)", "1px solid var(--border-color)"), width: "auto", padding: "11px 14px" }}>
@@ -236,47 +265,76 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
 
                 {/* ── Engagement ── */}
                 <Section icon={<TrendingUp size={14} style={{ color: "#a855f7" }} />} title="Engagement" defaultOpen={false}>
-                    <button onClick={getEngagement} disabled={engLoading} style={btn("var(--bg-input)", "#c084fc", "1px solid rgba(168,85,247,0.3)")}>
+                    <button onClick={getEngagement} disabled={engLoading} style={btn("var(--bg-input)", "var(--accent-violet)", "1px solid rgba(168,85,247,0.3)")}>
                         {engLoading ? <><Loader2 size={14} className="animate-spin" /> Predicting…</> : <><TrendingUp size={14} /> Get Suggestions</>}
                     </button>
                     {eng && (
                         <div style={{ marginTop: 14 }}>
-                            <div style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 10 }}>
-                                Predicted conversion: <span style={{ fontWeight: 800, color: "#c084fc" }}>{Math.round(eng.predictedConversion * 100)}%</span>
-                                <span style={{ fontSize: 10.5, color: "var(--text-muted)", marginLeft: 6 }}>(estimated)</span>
-                            </div>
-                            {(eng.suggestions || []).length === 0
-                                ? <p style={{ fontSize: 12, color: "#34d399" }}>Layout looks well-optimized for conversion.</p>
-                                : (eng.suggestions || []).map((s, i) => (
-                                    <div key={i} style={{ padding: "9px 11px", borderRadius: 10, background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.16)", marginBottom: 8 }}>
-                                        <div style={{ display: "flex", gap: 8 }}>
-                                            <TrendingUp size={13} style={{ color: "#c084fc", marginTop: 2, flexShrink: 0 }} />
-                                            <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{s.label}</span>
+                            {typeof eng.engagementScore === "number" && <Gauge100 value={eng.engagementScore} label="Engagement Readiness" />}
+
+                            {/* What's working */}
+                            {(eng.strengths || []).length > 0 && (
+                                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {eng.strengths.map((s, i) => (
+                                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                                            <Check size={13} style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }} />
+                                            <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{s}</span>
                                         </div>
-                                        {s.action === "move" && (
-                                            <button onClick={() => applyMove(s.from, s.to)} disabled={fixing} style={{ ...btn("#a855f7", "#fff"), marginTop: 9, padding: "8px" }}>
-                                                {fixing ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} /> Apply this fix{s.delta ? ` (+${Math.round(s.delta * 100)}%)` : ""}</>}
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Opportunities — applyable model suggestions first, then rubric insights */}
+                            <div style={{ marginTop: 12 }}>
+                                {(eng.suggestions || []).length === 0 && (eng.opportunities || []).length === 0 ? (
+                                    <p style={{ fontSize: 12.5, color: "#34d399" }}>Layout looks well-optimized for conversion. 🎉</p>
+                                ) : (
+                                    <>
+                                        {(eng.suggestions || []).map((s, i) => (
+                                            <div key={`s${i}`} style={{ padding: "9px 11px", borderRadius: 10, background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.16)", marginBottom: 8 }}>
+                                                <div style={{ display: "flex", gap: 8 }}>
+                                                    <TrendingUp size={13} style={{ color: "var(--accent-violet)", marginTop: 2, flexShrink: 0 }} />
+                                                    <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{s.label}</span>
+                                                </div>
+                                                {s.action === "move" && (
+                                                    <button onClick={() => applyMove(s.from, s.to)} disabled={fixing} style={{ ...btn("#a855f7", "#fff"), marginTop: 9, padding: "8px" }}>
+                                                        {fixing ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} /> Apply this fix{s.delta ? ` (+${Math.round(s.delta * 100)}%)` : ""}</>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {(eng.suggestions || []).length === 0 && (eng.opportunities || []).map((o, i) => (
+                                            <div key={`o${i}`} style={{ padding: "9px 11px", borderRadius: 10, background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.16)", marginBottom: 8, display: "flex", gap: 8 }}>
+                                                <TrendingUp size={13} style={{ color: "var(--accent-violet)", marginTop: 2, flexShrink: 0 }} />
+                                                <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{o}</span>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+
+                            {typeof eng.predictedConversion === "number" && (
+                                <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-muted)", borderTop: "1px solid var(--border-color)", paddingTop: 10 }}>
+                                    Estimated Conversion Potential: <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{Math.round(eng.predictedConversion * 100)}%</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </Section>
 
                 {/* ── Design Health ── */}
                 <Section icon={<ShieldCheck size={14} style={{ color: "#38bdf8" }} />} title="Design Health" defaultOpen={false}>
-                    <button onClick={scanDesign} disabled={dLoading} style={btn("var(--bg-input)", "#7dd3fc", "1px solid rgba(56,189,248,0.3)")}>
+                    <button onClick={scanDesign} disabled={dLoading} style={btn("var(--bg-input)", "var(--accent-sky)", "1px solid rgba(56,189,248,0.3)")}>
                         {dLoading ? <><Loader2 size={14} className="animate-spin" /> Scanning…</> : <><ShieldCheck size={14} /> Scan Design</>}
                     </button>
                     {design && (
                         <div style={{ marginTop: 14 }}>
-                            <Gauge100 value={design.healthScore} label="design health" />
+                            <Gauge100 value={design.healthScore} label="Design Health" />
                             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                                 {(design.flaws || []).length === 0
                                     ? <p style={{ fontSize: 12.5, color: "#34d399" }}>No design flaws detected. 🎉</p>
                                     : (design.flaws || []).map((f, i) => (
-                                        <div key={i} style={{ display: "flex", gap: 9, padding: "9px 11px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                                        <div key={i} style={{ display: "flex", gap: 9, padding: "9px 11px", borderRadius: 10, background: "rgba(var(--fg),0.03)", border: "1px solid rgba(var(--fg),0.05)" }}>
                                             <AlertTriangle size={13} style={{ color: SEV_COLOR[f.severity], marginTop: 2, flexShrink: 0 }} />
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>{f.label}</div>
@@ -295,7 +353,7 @@ export default function SeoPanel({ websiteId, pageId, open, onClose }) {
                 </Section>
 
                 <div style={{ padding: "14px 18px", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                    Powered by on-device deep-learning models (SEO MLP · GRU engagement · autoencoder flaw detection).
+                    AI-powered insights to help your site rank higher and convert more visitors.
                 </div>
             </div>
         </div>

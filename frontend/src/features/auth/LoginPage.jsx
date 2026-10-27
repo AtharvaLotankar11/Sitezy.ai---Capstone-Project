@@ -118,7 +118,7 @@ export default function LoginPage() {
                         }}>
                             {loading ? (
                                 <span className="animate-spin" style={{
-                                    width: 16, height: 16, border: "2px solid rgba(255,255,255,0.35)",
+                                    width: 16, height: 16, border: "2px solid rgba(var(--fg),0.35)",
                                     borderTopColor: "#fff", borderRadius: "50%", display: "inline-block",
                                 }} />
                             ) : (
@@ -129,7 +129,7 @@ export default function LoginPage() {
 
                     <p style={{ textAlign: "center", marginTop: 26, fontSize: 14, color: "var(--text-muted)" }}>
                         New to Sitezy.ai?{" "}
-                        <Link to="/register" style={{ color: "#5eead4", textDecoration: "none", fontWeight: 600 }}>
+                        <Link to="/register" style={{ color: "var(--text-accent)", textDecoration: "none", fontWeight: 600 }}>
                             Create a workspace
                         </Link>
                     </p>

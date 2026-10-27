@@ -24,6 +24,12 @@ export const addDomain = async (req, res) => {
     const { domain, websiteId } = req.body;
     if (!domain) return res.status(400).json({ success: false, message: "domain is required" });
 
+    // A domain may only be linked to a website of the caller's own tenant
+    if (websiteId) {
+        const owned = await Website.exists({ _id: websiteId, tenantId: req.tenantId }).catch(() => null);
+        if (!owned) return res.status(404).json({ success: false, message: "Website not found" });
+    }
+
     const existing = await Domain.findOne({ domain: domain.toLowerCase() });
     if (existing) {
         return res.status(409).json({ success: false, message: "Domain already registered" });
@@ -58,6 +64,39 @@ export const verifyDomain = async (req, res) => {
     await domain.save();
 
     res.json({ success: true, message: "Domain verified successfully", domain });
+};
+
+/**
+ * PUT /api/domains/:id
+ * Rename a custom domain (e.g. juices.com → freshjuices.com). The live site then
+ * resolves at the new link. Default subdomains cannot be renamed.
+ */
+export const updateDomain = async (req, res) => {
+    const newDomainRaw = (req.body.domain || "").trim().toLowerCase();
+    if (!newDomainRaw) return res.status(400).json({ success: false, message: "domain is required" });
+
+    const domain = await Domain.findOne({ _id: req.params.id, ...req.tenantFilter });
+    if (!domain) return res.status(404).json({ success: false, message: "Domain not found" });
+    if (domain.isDefault) return res.status(400).json({ success: false, message: "Cannot rename the default domain" });
+
+    if (newDomainRaw !== domain.domain) {
+        const clash = await Domain.findOne({ domain: newDomainRaw, _id: { $ne: domain._id } });
+        if (clash) return res.status(409).json({ success: false, message: "That domain is already registered" });
+    }
+
+    const oldDomain = domain.domain;
+    domain.domain = newDomainRaw;
+    await domain.save();
+
+    // Keep the linked website's defaultDomain in sync so the live link follows the rename.
+    if (domain.websiteId) {
+        await Website.updateOne(
+            { _id: domain.websiteId, tenantId: req.tenantId, defaultDomain: oldDomain },
+            { $set: { defaultDomain: newDomainRaw } }
+        );
+    }
+
+    res.json({ success: true, message: "Domain updated", domain });
 };
 
 /**

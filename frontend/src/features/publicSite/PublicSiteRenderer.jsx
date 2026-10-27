@@ -438,6 +438,27 @@ const GlowBlob = ({ color, style = {} }) => (
 );
 
 // ─── NAVBAR SECTION ────────────────────────────────────────────────────────────
+// Resolve a nav/footer link to one of the site's pages — by URL path (/about, /),
+// or by the link label matching a page title/slug. Lets navbars interconnect
+// automatically without anyone hand-filling URLs.
+export function resolvePageLink(item, allPages = []) {
+    const isObj = item && typeof item === "object";
+    const label = isObj ? item.label : item;
+    const url = isObj ? item.url : "";
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    if (typeof url === "string" && url.startsWith("/")) {
+        const slug = url === "/" ? "home" : url.replace(/^\/+|\/+$/g, "").toLowerCase();
+        const m = allPages.find((p) => norm(p.slug) === slug) || (slug === "home" ? allPages.find((p) => p.isHomePage) : null);
+        if (m) return m;
+    }
+    const l = norm(label);
+    if (l) {
+        const m = allPages.find((p) => norm(p.title) === l || norm(p.slug) === l);
+        if (m) return m;
+    }
+    return null;
+}
+
 const NavbarSection = ({ props, branding, allPages, currentPage, onPageChange }) => {
     const accent = props.accentColor || branding?.primaryColor || "#6366f1";
     const bg = props.bgColor || "#ffffff";
@@ -448,7 +469,17 @@ const NavbarSection = ({ props, branding, allPages, currentPage, onPageChange })
     useEffect(() => { loadFont(font); }, [font]);
 
     const brand = props.brand || "Brand";
-    const links = props.links || ["Home", "About", "Services", "Contact"];
+    let links = props.links || ["Home", "About", "Services", "Contact"];
+    // Auto-link: if the navbar doesn't already link to EVERY page, replace it with the
+    // real page list so navigation is fully interconnected (no manual auto-fill needed).
+    if (onPageChange && Array.isArray(allPages) && allPages.length > 1) {
+        const matched = new Set(links.map((l) => resolvePageLink(l, allPages)).filter(Boolean).map((p) => String(p._id)));
+        if (matched.size < allPages.length) {
+            links = [...allPages]
+                .sort((a, b) => (b.isHomePage ? 1 : 0) - (a.isHomePage ? 1 : 0))
+                .map((p) => ({ label: p.title, url: p.isHomePage ? "/" : `/${p.slug}` }));
+        }
+    }
     const fontStyle = `"${font}", "Inter", sans-serif`;
 
     const brandEl = (
@@ -463,32 +494,25 @@ const NavbarSection = ({ props, branding, allPages, currentPage, onPageChange })
             {links.map((item, i) => {
                 const isObj = typeof item === 'object' && item !== null;
                 const label = isObj ? item.label : item;
-                const url = isObj ? item.url : `#${label.toLowerCase().replace(/\s/g, "-")}`;
+                const url = isObj ? item.url : `#${String(label).toLowerCase().replace(/\s/g, "-")}`;
 
-                // Try to handle internal routing using onPageChange
-                if (url.startsWith('/') && onPageChange && allPages) {
-                    const targetSlug = url === '/' ? 'home' : url.substring(1);
-                    const matchedPage = allPages.find(p => p.slug === targetSlug);
-                    if (matchedPage) {
-                        return (
-                            <button
-                                key={i}
-                                onClick={() => onPageChange(matchedPage)}
-                                className="sp-nav-link"
-                                style={{
-                                    color: tc,
-                                    fontFamily: fontStyle,
-                                    background: "none",
-                                    border: "none",
-                                    cursor: "pointer",
-                                    fontWeight: currentPage?._id === matchedPage._id ? 700 : 600,
-                                    opacity: currentPage?._id === matchedPage._id ? 1 : 0.7,
-                                }}
-                            >
-                                {label}
-                            </button>
-                        );
-                    }
+                // Auto-interconnect: resolve this link to a real page (by URL or label).
+                const matchedPage = (onPageChange && allPages) ? resolvePageLink(item, allPages) : null;
+                if (matchedPage) {
+                    return (
+                        <button
+                            key={i}
+                            onClick={() => onPageChange(matchedPage)}
+                            className="sp-nav-link"
+                            style={{
+                                color: tc, fontFamily: fontStyle, background: "none", border: "none", cursor: "pointer",
+                                fontWeight: currentPage?._id === matchedPage._id ? 700 : 600,
+                                opacity: currentPage?._id === matchedPage._id ? 1 : 0.7,
+                            }}
+                        >
+                            {label}
+                        </button>
+                    );
                 }
 
                 return (
@@ -499,7 +523,7 @@ const NavbarSection = ({ props, branding, allPages, currentPage, onPageChange })
     );
 
     const ctaEl = (
-        <button className="sp-btn-base" style={{ background: accent, color: light ? "#000" : "#fff", padding: "11px 24px", borderRadius: "100px", fontSize: "13px", fontFamily: fontStyle, boxShadow: `0 4px 16px ${accent}55` }}>
+        <button className="sp-btn-base" style={{ background: accent, color: readableText(accent, "#fff"), padding: "11px 24px", borderRadius: "100px", fontSize: "13px", fontFamily: fontStyle, boxShadow: `0 4px 16px ${accent}55` }}>
             Get Started
         </button>
     );
@@ -536,35 +560,25 @@ const NavbarSection = ({ props, branding, allPages, currentPage, onPageChange })
                         {links.map((item, i) => {
                             const isObj = typeof item === 'object' && item !== null;
                             const label = isObj ? item.label : item;
-                            const url = isObj ? item.url : `#${label.toLowerCase().replace(/\s/g, "-")}`;
+                            const url = isObj ? item.url : `#${String(label).toLowerCase().replace(/\s/g, "-")}`;
 
-                            // Try to handle internal routing using onPageChange
-                            if (url.startsWith('/') && onPageChange && allPages) {
-                                const targetSlug = url === '/' ? 'home' : url.substring(1);
-                                const matchedPage = allPages.find(p => p.slug === targetSlug);
-                                if (matchedPage) {
-                                    return (
-                                        <button
-                                            key={i}
-                                            onClick={() => onPageChange(matchedPage)}
-                                            className="sp-nav-link"
-                                            style={{
-                                                color: tc,
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.08em",
-                                                fontSize: "12px",
-                                                fontFamily: fontStyle,
-                                                background: "none",
-                                                border: "none",
-                                                cursor: "pointer",
-                                                fontWeight: currentPage?._id === matchedPage._id ? 700 : 600,
-                                                opacity: currentPage?._id === matchedPage._id ? 1 : 0.7,
-                                            }}
-                                        >
-                                            {label}
-                                        </button>
-                                    );
-                                }
+                            const matchedPage = (onPageChange && allPages) ? resolvePageLink(item, allPages) : null;
+                            if (matchedPage) {
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => onPageChange(matchedPage)}
+                                        className="sp-nav-link"
+                                        style={{
+                                            color: tc, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "12px",
+                                            fontFamily: fontStyle, background: "none", border: "none", cursor: "pointer",
+                                            fontWeight: currentPage?._id === matchedPage._id ? 700 : 600,
+                                            opacity: currentPage?._id === matchedPage._id ? 1 : 0.7,
+                                        }}
+                                    >
+                                        {label}
+                                    </button>
+                                );
                             }
 
                             return (
@@ -629,7 +643,7 @@ const HeroSection = ({ props, branding }) => {
     const CTARow = () => (
         <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", marginTop: "38px" }}>
             {props.ctaText && (
-                <a href={props.ctaLink || "#"} className="sp-btn-base sp-animate-up" style={{ background: accent, color: light ? "#0a0a0a" : "#fff", padding: "15px 34px", borderRadius: btnRadius, fontSize: "15px", fontWeight: 600, fontFamily: fontStyle, boxShadow: `0 10px 30px ${accent}33`, animationDelay: "0.35s" }}>
+                <a href={props.ctaLink || "#"} className="sp-btn-base sp-animate-up" style={{ background: accent, color: readableText(accent, "#fff"), padding: "15px 34px", borderRadius: btnRadius, fontSize: "15px", fontWeight: 600, fontFamily: fontStyle, boxShadow: `0 10px 30px ${accent}33`, animationDelay: "0.35s" }}>
                     {props.ctaText}
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>
                 </a>
@@ -661,7 +675,7 @@ const HeroSection = ({ props, branding }) => {
                     )}
                     {props.ctaText && (
                         <div className="sp-animate-up" style={{ marginTop: "36px", display: "flex", justifyContent: "center", animationDelay: "0.3s" }}>
-                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: light ? "#0a0a0a" : "#fff", padding: "16px 40px", borderRadius: serif ? "6px" : "100px", fontSize: "15px", fontWeight: 600, fontFamily: fontStyle, boxShadow: `0 10px 30px ${accent}33` }}>
+                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: readableText(accent, "#fff"), padding: "16px 40px", borderRadius: serif ? "6px" : "100px", fontSize: "15px", fontWeight: 600, fontFamily: fontStyle, boxShadow: `0 10px 30px ${accent}33` }}>
                                 {props.ctaText}
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>
                             </a>
@@ -812,7 +826,7 @@ const TextSection = ({ props, branding }) => {
                     </div>
                     <div>
                         <div style={{ position: "relative", background: light ? "rgba(255,255,255,0.05)" : "#fff", padding: "40px", borderRadius: "24px", border: `1px solid ${light ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}`, boxShadow: DS.shadow.lg }}>
-                            <div style={{ position: "absolute", top: "-16px", left: "28px", width: "32px", height: "32px", borderRadius: "8px", background: accent, color: light ? "#000" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 800, boxShadow: DS.shadow.colored(accent) }}>"</div>
+                            <div style={{ position: "absolute", top: "-16px", left: "28px", width: "32px", height: "32px", borderRadius: "8px", background: accent, color: readableText(accent, "#fff"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 800, boxShadow: DS.shadow.colored(accent) }}>"</div>
                             {props.description && <p style={{ fontSize: "1.1rem", lineHeight: "1.85", color: tc, opacity: 0.8, fontFamily: fontStyle }}>{props.description}</p>}
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "20px" }}>
@@ -1106,7 +1120,7 @@ const CTASection = ({ props, branding }) => {
                 <div style={{ flex: "1 1 50%", padding: "88px 72px", display: "flex", alignItems: "center", justifyContent: "center", background: light ? "#111" : "#f9fafb", position: "relative" }}>
                     <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: "360px", width: "100%" }}>
                         {props.ctaText && (
-                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: light ? "#000" : "#fff", padding: "18px 0", borderRadius: "14px", width: "100%", justifyContent: "center", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent), fontSize: "16px" }}>
+                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: readableText(accent, "#fff"), padding: "18px 0", borderRadius: "14px", width: "100%", justifyContent: "center", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent), fontSize: "16px" }}>
                                 {props.ctaText}
                             </a>
                         )}
@@ -1126,7 +1140,7 @@ const CTASection = ({ props, branding }) => {
                     {props.heading && <h2 style={{ fontSize: DS.font.h2, fontWeight: hType.fontWeight, color: "#fff", marginBottom: "18px", lineHeight: hType.lineHeight, letterSpacing: hType.letterSpacing, fontFamily: fontStyle }}>{props.heading}</h2>}
                     {props.subheading && <p style={{ fontSize: "1.08rem", color: "rgba(255,255,255,0.75)", lineHeight: 1.72, marginBottom: "34px", fontFamily: fontStyle }}>{props.subheading}</p>}
                     {props.ctaText && (
-                        <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: "#fff", padding: "16px 40px", borderRadius: "100px", fontSize: "16px", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent) }}>
+                        <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: readableText(accent, "#fff"), padding: "16px 40px", borderRadius: "100px", fontSize: "16px", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent) }}>
                             {props.ctaText}
                         </a>
                     )}
@@ -1150,7 +1164,7 @@ const CTASection = ({ props, branding }) => {
                     {props.subheading && <p style={{ fontSize: "1.1rem", color: tc, opacity: 0.72, lineHeight: 1.75, marginBottom: "38px", fontFamily: fontStyle }}>{props.subheading}</p>}
                     <div style={{ display: "flex", justifyContent: "center", gap: "12px", flexWrap: "wrap" }}>
                         {props.ctaText && (
-                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: light ? "#000" : "#fff", padding: "16px 40px", borderRadius: "100px", fontSize: "16px", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent) }}>
+                            <a href={props.ctaLink || "#"} className="sp-btn-base" style={{ background: accent, color: readableText(accent, "#fff"), padding: "16px 40px", borderRadius: "100px", fontSize: "16px", fontFamily: fontStyle, boxShadow: DS.shadow.colored(accent) }}>
                                 {props.ctaText}
                             </a>
                         )}
@@ -1230,7 +1244,7 @@ const ContactFormSection = ({ props, branding, websiteId }) => {
                                 ? <textarea key={f} name={f} placeholder={label} rows={4} value={formData[f] || ""} onChange={e => handleInputChange(f, e.target.value)} style={{ ...inputStyle, resize: "vertical" }} />
                                 : <input key={f} type={f.includes("email") ? "email" : "text"} name={f} placeholder={label} value={formData[f] || ""} onChange={e => handleInputChange(f, e.target.value)} style={inputStyle} />;
                         })}
-                        <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.5)" : accent, color: "#fff", padding: "15px", justifyContent: "center", borderRadius: "12px", width: "100%", fontSize: "15px", fontFamily: fontStyle, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
+                        <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.5)" : accent, color: submitting ? "#fff" : readableText(accent, "#fff"), padding: "15px", justifyContent: "center", borderRadius: "12px", width: "100%", fontSize: "15px", fontFamily: fontStyle, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
                             {submitting ? "Sending…" : (props.submitText || "Send Message")}
                         </button>
                     </form>
@@ -1267,7 +1281,7 @@ const ContactFormSection = ({ props, branding, websiteId }) => {
                                 ? <textarea key={f} name={f} placeholder={label} rows={4} value={formData[f] || ""} onChange={e => handleInputChange(f, e.target.value)} style={{ ...inputStyle, resize: "vertical" }} />
                                 : <input key={f} type={f.includes("email") ? "email" : "text"} name={f} placeholder={label} value={formData[f] || ""} onChange={e => handleInputChange(f, e.target.value)} style={inputStyle} />;
                         })}
-                        <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.5)" : accent, color: "#fff", padding: "15px", justifyContent: "center", borderRadius: "12px", width: "100%", fontSize: "15px", fontFamily: fontStyle, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
+                        <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.5)" : accent, color: submitting ? "#fff" : readableText(accent, "#fff"), padding: "15px", justifyContent: "center", borderRadius: "12px", width: "100%", fontSize: "15px", fontFamily: fontStyle, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
                             {submitting ? "Sending…" : (props.submitText || "Send Message")}
                         </button>
                     </form>
@@ -1383,22 +1397,52 @@ const DynamicFormSection = ({ props, branding, websiteId }) => {
 
     const renderField = (field, idx) => {
         const { name, label, type = "text", options, placeholder, required = true } = field;
+        const opts = (Array.isArray(options) ? options : []).map((o) => String(o ?? "")).filter((o) => o.trim() !== "");
         const isArea = type === "textarea" || name.toLowerCase().includes("message") || name.toLowerCase().includes("instruction");
-        const isSelect = type === "select" && Array.isArray(options) && options.length > 0;
-        const isWide = isArea || isSelect || type === "date";
-        const fieldEl = isSelect ? (
-            <div style={{ position: "relative" }}>
-                <select name={name} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={{ ...inputBaseStyle, appearance: "none", WebkitAppearance: "none", cursor: "pointer", paddingRight: "36px" }} required={required}>
-                    <option value="" disabled>Select {label}</option>
-                    {options.map(opt => <option key={opt} value={opt} style={{ color: "#111", background: "#fff" }}>{opt}</option>)}
-                </select>
-                <span style={{ position: "absolute", right: "13px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: accent, fontWeight: 900, fontSize: "11px" }}>▾</span>
-            </div>
-        ) : isArea ? (
-            <textarea name={name} placeholder={placeholder || label} rows={3} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={{ ...inputBaseStyle, resize: "vertical", minHeight: "84px" }} required={required} />
-        ) : (
-            <input type={type} name={name} placeholder={placeholder || label} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={inputBaseStyle} required={required} />
-        );
+        const isSelect = type === "select" && opts.length > 0;
+        const isRadio = type === "radio" && opts.length > 0;
+        const isCheckbox = type === "checkbox" && opts.length > 0;
+        const isWide = isArea || isSelect || isRadio || isCheckbox || type === "date";
+        const choiceWrap = { display: "flex", flexWrap: "wrap", gap: "14px", paddingTop: "4px" };
+        const choiceLabel = { display: "flex", alignItems: "center", gap: "7px", fontFamily: fontStyle, fontSize: "14px", color: labelColor, cursor: "pointer" };
+        let fieldEl;
+        if (isSelect) {
+            fieldEl = (
+                <div style={{ position: "relative" }}>
+                    <select name={name} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={{ ...inputBaseStyle, appearance: "none", WebkitAppearance: "none", cursor: "pointer", paddingRight: "36px" }} required={required}>
+                        <option value="" disabled>Select {label}</option>
+                        {opts.map(opt => <option key={opt} value={opt} style={{ color: "#111", background: "#fff" }}>{opt}</option>)}
+                    </select>
+                    <span style={{ position: "absolute", right: "13px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: accent, fontWeight: 900, fontSize: "11px" }}>▾</span>
+                </div>
+            );
+        } else if (isRadio) {
+            fieldEl = (
+                <div style={choiceWrap}>
+                    {opts.map(opt => (
+                        <label key={opt} style={choiceLabel}>
+                            <input type="radio" name={name} value={opt} checked={formData[name] === opt} onChange={() => handleInputChange(name, opt)} style={{ accentColor: accent }} required={required} /> {opt}
+                        </label>
+                    ))}
+                </div>
+            );
+        } else if (isCheckbox) {
+            const sel = Array.isArray(formData[name]) ? formData[name] : [];
+            const toggle = (opt) => handleInputChange(name, sel.includes(opt) ? sel.filter(o => o !== opt) : [...sel, opt]);
+            fieldEl = (
+                <div style={choiceWrap}>
+                    {opts.map(opt => (
+                        <label key={opt} style={choiceLabel}>
+                            <input type="checkbox" checked={sel.includes(opt)} onChange={() => toggle(opt)} style={{ accentColor: accent }} /> {opt}
+                        </label>
+                    ))}
+                </div>
+            );
+        } else if (isArea) {
+            fieldEl = <textarea name={name} placeholder={placeholder || label} rows={3} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={{ ...inputBaseStyle, resize: "vertical", minHeight: "84px" }} required={required} />;
+        } else {
+            fieldEl = <input type={type} name={name} placeholder={placeholder || label} value={formData[name] || ""} onChange={e => handleInputChange(name, e.target.value)} style={inputBaseStyle} required={required} />;
+        }
         return (
             <div key={name + idx} style={{ gridColumn: isWide ? "1 / -1" : "auto", display: "flex", flexDirection: "column", gap: "5px" }}>
                 <label style={{ fontSize: "11px", fontWeight: 700, color: labelColor, fontFamily: fontStyle, textTransform: "uppercase", letterSpacing: "0.07em" }}>
@@ -1415,7 +1459,7 @@ const DynamicFormSection = ({ props, branding, websiteId }) => {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "13px" }}>
                 {fields.map((field, idx) => renderField(field, idx))}
             </div>
-            <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.35)" : `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", padding: "16px", justifyContent: "center", borderRadius: "14px", width: "100%", fontSize: "15px", fontFamily: fontStyle, fontWeight: 800, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
+            <button type="submit" disabled={submitting} className="sp-btn-base" style={{ background: submitting ? "rgba(100,100,100,0.35)" : `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: submitting ? "#fff" : readableText(accent, "#fff"), padding: "16px", justifyContent: "center", borderRadius: "14px", width: "100%", fontSize: "15px", fontFamily: fontStyle, fontWeight: 800, boxShadow: submitting ? "none" : DS.shadow.colored(accent), cursor: submitting ? "not-allowed" : "pointer", marginTop: "4px" }}>
                 {submitting ? <span style={{ display: "flex", alignItems: "center", gap: "10px", justifyContent: "center" }}><span style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "sp-spin 0.7s linear infinite", display: "inline-block" }} />Submitting…</span> : (props.submitText || "Submit Order →")}
             </button>
             <p style={{ textAlign: "center", fontSize: "11px", color: tc, opacity: 0.4, fontFamily: fontStyle }}>🔒 Saved to Firebase · Never shared</p>
@@ -1551,6 +1595,29 @@ export default function PublicSiteRenderer() {
         }
         if (siteData.website?.name) document.title = siteData.website.name;
     }, [siteData]);
+
+    // ── Per-page SEO meta: <title>, <meta description>, JSON-LD structured data ──
+    useEffect(() => {
+        const seo = currentPage?.seo;
+        const siteName = siteData?.website?.name;
+        if (seo?.metaTitle) document.title = siteName ? `${seo.metaTitle} · ${siteName}` : seo.metaTitle;
+        else if (siteName) document.title = siteName;
+
+        let metaEl = document.head.querySelector('meta[name="description"]');
+        if (seo?.metaDescription) {
+            if (!metaEl) { metaEl = document.createElement("meta"); metaEl.setAttribute("name", "description"); document.head.appendChild(metaEl); }
+            metaEl.setAttribute("content", seo.metaDescription);
+        }
+
+        const LD_ID = "sz-jsonld";
+        let ld = document.getElementById(LD_ID);
+        if (seo?.jsonLd) {
+            if (!ld) { ld = document.createElement("script"); ld.type = "application/ld+json"; ld.id = LD_ID; document.head.appendChild(ld); }
+            ld.textContent = JSON.stringify(seo.jsonLd);
+        } else if (ld) { ld.remove(); }
+
+        return () => { const el = document.getElementById(LD_ID); if (el) el.remove(); };
+    }, [currentPage, siteData]);
 
     // ── Track this browser tab as a live visitor ──────────────────────────────
     // Must be called before any early returns (Rules of Hooks)

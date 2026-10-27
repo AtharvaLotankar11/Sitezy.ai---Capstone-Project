@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "./user.model.js";
+import User, { AVATAR_KEYS } from "./user.model.js";
 import Tenant from "../tenant/tenant.model.js";
 import Domain from "../domain/domain.model.js";
 import { logActivity } from "../../middleware/logger.middleware.js";
@@ -62,7 +62,7 @@ export const register = async (req, res) => {
         success: true,
         message: "Tenant registered successfully",
         token,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
         tenant: { id: tenant._id, name: tenant.name, slug: tenant.slug, branding: tenant.branding },
     });
 };
@@ -105,7 +105,7 @@ export const login = async (req, res) => {
     res.json({
         success: true,
         token,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
         tenant: { id: tenant._id, name: tenant.name, slug: tenant.slug, branding: tenant.branding },
     });
 };
@@ -147,7 +147,7 @@ export const inviteUser = async (req, res) => {
     res.status(201).json({
         success: true,
         message: `User invited successfully`,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
     });
 };
 
@@ -225,4 +225,26 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user._id).select("-password").lean();
     const tenant = await Tenant.findById(req.tenantId).lean();
     res.json({ success: true, user, tenant });
+};
+
+/**
+ * PUT /api/auth/me
+ * Update the signed-in user's own profile (name + avatar).
+ */
+export const updateMe = async (req, res) => {
+    const { name, avatar } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (typeof name === "string" && name.trim().length >= 2) user.name = name.trim();
+    if (typeof avatar === "string" && AVATAR_KEYS.includes(avatar)) user.avatar = avatar;
+    await user.save();
+
+    const tenant = await Tenant.findById(req.tenantId).lean();
+    res.json({
+        success: true,
+        message: "Profile updated",
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+        tenant: tenant ? { id: tenant._id, name: tenant.name, slug: tenant.slug, branding: tenant.branding } : undefined,
+    });
 };

@@ -28,6 +28,15 @@ export const createWebsite = createAsyncThunk("website/create", async (data, { r
     }
 });
 
+export const updateWebsite = createAsyncThunk("website/update", async ({ id, data }, { rejectWithValue }) => {
+    try {
+        const res = await api.put(`/websites/${id}`, data);
+        return res.data.website;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || "Update failed");
+    }
+});
+
 export const deleteWebsite = createAsyncThunk("website/delete", async (id, { rejectWithValue }) => {
     try {
         await api.delete(`/websites/${id}`);
@@ -75,6 +84,10 @@ const websiteSlice = createSlice({
             .addCase(fetchWebsites.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
             .addCase(fetchWebsite.fulfilled, (state, action) => { state.currentWebsite = action.payload; })
             .addCase(createWebsite.fulfilled, (state, action) => { state.websites.unshift(action.payload); })
+            .addCase(updateWebsite.fulfilled, (state, action) => {
+                const idx = state.websites.findIndex((w) => w._id === action.payload._id);
+                if (idx !== -1) state.websites[idx] = { ...state.websites[idx], ...action.payload };
+            })
             .addCase(deleteWebsite.fulfilled, (state, action) => {
                 state.websites = state.websites.filter((w) => w._id !== action.payload);
             })

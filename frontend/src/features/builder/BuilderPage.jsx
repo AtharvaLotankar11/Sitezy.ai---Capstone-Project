@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
-    fetchPages, fetchPage, createPage, deletePage, updateSections, saveDraft,
+    fetchPages, fetchPage, createPage, createAiPage, deletePage, updateSections, saveDraft,
     setSelectedSection, setCurrentPage, updateLocalSections, updateSectionProps,
     setActiveEditors, applyRemoteUpdate,
 } from "../../store/slices/builderSlice.js";
@@ -12,12 +12,13 @@ import toast from "react-hot-toast";
 import {
     ArrowLeft, Plus, Trash2, GripVertical, Rocket, Save,
     Users, Pencil, FileText, Eye, Loader2, LayoutGrid, Globe, History, GitCommitHorizontal, Gauge,
-    Monitor, Tablet, Smartphone, Maximize, Minimize
+    Monitor, Tablet, Smartphone, Maximize, Minimize, ChevronDown
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import SectionEditor from "./SectionEditor.jsx";
 import { SECTION_MAP, globalResponsiveCss } from "../publicSite/PublicSiteRenderer.jsx";
 import ChatPanel from "./ChatPanel.jsx";
+import HelpAssistant from "../../components/HelpAssistant.jsx";
 import VersionPanel from "./VersionPanel.jsx";
 import SeoPanel from "./SeoPanel.jsx";
 import PublishModal from "./PublishModal.jsx";
@@ -45,6 +46,7 @@ export default function BuilderPage() {
     const [previewWidth, setPreviewWidth] = useState("100%");
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [cursors, setCursors] = useState({});
+    const [showAddMenu, setShowAddMenu] = useState(false);
 
     useEffect(() => {
         const socket = connectSocket(token);
@@ -117,12 +119,18 @@ export default function BuilderPage() {
 
     const handlePageSelect = (page) => { navigate(`/websites/${websiteId}/builder/${page._id}`); dispatch(setCurrentPage(page)); };
     const handleAddPage = async () => {
-        const title = prompt("Page title:");
-        if (!title) return;
-        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        const res = await dispatch(createPage({ websiteId, data: { title, slug } }));
-        if (createPage.fulfilled.match(res)) { toast.success("Page created"); navigate(`/websites/${websiteId}/builder/${res.payload._id}`); }
-        else toast.error(res.payload || "Failed to create page");
+        const title = prompt("New page name (e.g. Menu, Services, Pricing):");
+        if (!title || !title.trim()) return;
+        const t = toast.loading("AI is building your page…");
+        const res = await dispatch(createAiPage({ websiteId, title: title.trim() }));
+        if (createAiPage.fulfilled.match(res)) {
+            // The new page + every existing page's navbar changed server-side → resync.
+            await dispatch(fetchPages(websiteId));
+            toast.success("Page added & linked into your navigation", { id: t });
+            navigate(`/websites/${websiteId}/builder/${res.payload._id}`);
+        } else {
+            toast.error(res.payload || "Failed to add page", { id: t });
+        }
     };
     const handleDeletePage = async (page) => {
         if (page.isHomePage) return toast.error("Cannot delete homepage");
@@ -260,12 +268,12 @@ export default function BuilderPage() {
                         <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: 14 }}>
                             <Link to="/websites" style={{
                                 display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600,
-                                color: "rgba(255,255,255,0.4)", textDecoration: "none",
+                                color: "rgba(var(--fg),0.4)", textDecoration: "none",
                             }}>
                                 <ArrowLeft size={14} /> Back
                             </Link>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                <h3 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)" }}>Pages</h3>
+                                <h3 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(var(--fg),0.35)" }}>Pages</h3>
                                 {canEdit && (
                                     <button onClick={handleAddPage} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-primary)", padding: 4 }}>
                                         <Plus size={16} strokeWidth={2.5} />
@@ -285,14 +293,14 @@ export default function BuilderPage() {
                                         background: active ? "rgba(20,184,166,0.14)" : "transparent",
                                         border: active ? "1px solid rgba(20,184,166,0.3)" : "1px solid transparent",
                                     }}>
-                                        <FileText size={14} style={{ color: active ? "var(--color-primary)" : "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+                                        <FileText size={14} style={{ color: active ? "var(--color-primary)" : "rgba(var(--fg),0.3)", flexShrink: 0 }} />
                                         <span style={{
                                             fontSize: 13, fontWeight: active ? 700 : 500, flex: 1,
                                             color: active ? "var(--color-primary)" : "var(--text-secondary)",
                                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                         }}>{page.title}</span>
                                         {page.isHomePage && (
-                                            <span style={{ fontSize: 9, fontWeight: 800, background: "rgba(255,255,255,0.08)", padding: "2px 6px", borderRadius: 6, color: "rgba(255,255,255,0.4)" }}>HOME</span>
+                                            <span style={{ fontSize: 9, fontWeight: 800, background: "rgba(var(--fg),0.08)", padding: "2px 6px", borderRadius: 6, color: "rgba(var(--fg),0.4)" }}>HOME</span>
                                         )}
                                         {!page.isHomePage && canEdit && (
                                             <button onClick={(e) => { e.stopPropagation(); handleDeletePage(page); }}
@@ -318,7 +326,7 @@ export default function BuilderPage() {
                             padding: "14px 16px", borderBottom: "1px solid var(--border-color)",
                             display: "flex", alignItems: "center", justifyContent: "space-between",
                         }}>
-                            <h3 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)" }}>
+                            <h3 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(var(--fg),0.35)" }}>
                                 Page Layers (Sections)
                             </h3>
                         </div>
@@ -346,7 +354,7 @@ export default function BuilderPage() {
                                                         >
                                                             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
                                                                 {canEdit && (
-                                                                    <span {...provided.dragHandleProps} style={{ color: "rgba(255,255,255,0.2)", display: "flex", cursor: "grab" }}>
+                                                                    <span {...provided.dragHandleProps} style={{ color: "rgba(var(--fg),0.2)", display: "flex", cursor: "grab" }}>
                                                                         <GripVertical size={14} />
                                                                     </span>
                                                                 )}
@@ -403,16 +411,51 @@ export default function BuilderPage() {
                                         {provided.placeholder}
                                         {(currentPage.layoutConfig?.sections?.length || 0) === 0 && (
                                             <div style={{
-                                                textAlign: "center", padding: "40px 16px", border: "2px dashed rgba(255,255,255,0.08)",
+                                                textAlign: "center", padding: "40px 16px", border: "2px dashed rgba(var(--fg),0.08)",
                                                 borderRadius: 16, marginTop: 8,
                                             }}>
-                                                <LayoutGrid size={24} style={{ color: "rgba(255,255,255,0.12)", margin: "0 auto 8px" }} />
-                                                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, fontWeight: 600 }}>No sections. Add from the right panel.</p>
+                                                <LayoutGrid size={24} style={{ color: "rgba(var(--fg),0.12)", margin: "0 auto 8px" }} />
+                                                <p style={{ color: "rgba(var(--fg),0.25)", fontSize: 12, fontWeight: 600 }}>No sections yet. Use “Add Section” below.</p>
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </Droppable>
+
+                            {/* Add Section — lives inside the Page Layers column */}
+                            {canEdit && (
+                                <div style={{ marginTop: 10, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
+                                    <button onClick={() => setShowAddMenu((v) => !v)} style={{
+                                        width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                                        padding: "11px 14px", borderRadius: 12, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                                        background: "var(--grad-btn)", color: "#fff", border: "1px solid rgba(var(--fg),0.12)",
+                                        fontFamily: "var(--font-display)", boxShadow: "0 4px 12px rgba(8,90,72,0.3)",
+                                    }}>
+                                        <Plus size={15} strokeWidth={2.5} /> Add Section
+                                        <ChevronDown size={14} style={{ transform: showAddMenu ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }} />
+                                    </button>
+                                    {showAddMenu && (
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
+                                            {SECTION_TYPES.map((type) => (
+                                                <button
+                                                    key={type}
+                                                    onClick={() => { handleAddSection(type); setShowAddMenu(false); }}
+                                                    style={{
+                                                        display: "flex", alignItems: "center", gap: 8, padding: "10px 11px", borderRadius: 10,
+                                                        fontSize: 12, fontWeight: 700, textAlign: "left", cursor: "pointer", transition: "all 0.15s ease",
+                                                        background: "var(--bg-input)", border: "1px solid var(--border-color)", color: "var(--text-secondary)",
+                                                    }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = SECTION_COLORS[type]; e.currentTarget.style.color = SECTION_COLORS[type]; e.currentTarget.style.background = `${SECTION_COLORS[type]}10`; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-color)"; e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.background = "var(--bg-input)"; }}
+                                                >
+                                                    <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: SECTION_COLORS[type], boxShadow: `0 0 8px ${SECTION_COLORS[type]}` }} />
+                                                    {type}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -426,16 +469,16 @@ export default function BuilderPage() {
                         borderBottom: "1px solid var(--border-color)", flexShrink: 0,
                     }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <Eye size={16} style={{ color: "rgba(255,255,255,0.5)" }} />
+                            <Eye size={16} style={{ color: "rgba(var(--fg),0.5)" }} />
                             <h2 style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>Live Preview</h2>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "4px" }}>
-                            <button onClick={() => setPreviewWidth("100%")} style={{ background: previewWidth === "100%" ? "rgba(255,255,255,0.1)" : "transparent", color: previewWidth === "100%" ? "white" : "rgba(255,255,255,0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Monitor size={14} /></button>
-                            <button onClick={() => setPreviewWidth("768px")} style={{ background: previewWidth === "768px" ? "rgba(255,255,255,0.1)" : "transparent", color: previewWidth === "768px" ? "white" : "rgba(255,255,255,0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Tablet size={14} /></button>
-                            <button onClick={() => setPreviewWidth("375px")} style={{ background: previewWidth === "375px" ? "rgba(255,255,255,0.1)" : "transparent", color: previewWidth === "375px" ? "white" : "rgba(255,255,255,0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Smartphone size={14} /></button>
-                            <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
-                            <button onClick={() => setIsFullscreen(!isFullscreen)} title="Presentation Mode" style={{ background: isFullscreen ? "rgba(20,184,166,0.2)" : "transparent", color: isFullscreen ? "#5eead4" : "rgba(255,255,255,0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                            <button onClick={() => setPreviewWidth("100%")} style={{ background: previewWidth === "100%" ? "rgba(var(--fg),0.1)" : "transparent", color: previewWidth === "100%" ? "white" : "rgba(var(--fg),0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Monitor size={14} /></button>
+                            <button onClick={() => setPreviewWidth("768px")} style={{ background: previewWidth === "768px" ? "rgba(var(--fg),0.1)" : "transparent", color: previewWidth === "768px" ? "white" : "rgba(var(--fg),0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Tablet size={14} /></button>
+                            <button onClick={() => setPreviewWidth("375px")} style={{ background: previewWidth === "375px" ? "rgba(var(--fg),0.1)" : "transparent", color: previewWidth === "375px" ? "white" : "rgba(var(--fg),0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><Smartphone size={14} /></button>
+                            <div style={{ width: 1, height: 16, background: "rgba(var(--fg),0.1)", margin: "0 4px" }} />
+                            <button onClick={() => setIsFullscreen(!isFullscreen)} title="Presentation Mode" style={{ background: isFullscreen ? "rgba(20,184,166,0.2)" : "transparent", color: isFullscreen ? "var(--text-accent)" : "rgba(var(--fg),0.4)", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>
                                 {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
                             </button>
                         </div>
@@ -446,7 +489,7 @@ export default function BuilderPage() {
                                     display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
                                     borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-color)",
                                 }}>
-                                    <Users size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
+                                    <Users size={13} style={{ color: "rgba(var(--fg),0.4)" }} />
                                     <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>{activeEditors.length}</span>
                                     <div style={{ display: "flex" }}>
                                         {activeEditors.slice(0, 3).map((ed) => (
@@ -467,7 +510,7 @@ export default function BuilderPage() {
                                 borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
                                 background: showSeoPanel ? "rgba(20,184,166,0.14)" : "var(--bg-input)",
                                 border: showSeoPanel ? "1px solid rgba(20,184,166,0.3)" : "1px solid var(--border-color)",
-                                color: showSeoPanel ? "#5eead4" : "var(--text-primary)",
+                                color: showSeoPanel ? "var(--text-accent)" : "var(--text-primary)",
                             }}>
                                 <Gauge size={14} /> SEO
                             </button>
@@ -477,7 +520,7 @@ export default function BuilderPage() {
                                 borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
                                 background: showVersionPanel ? "rgba(20,184,166,0.14)" : "var(--bg-input)",
                                 border: showVersionPanel ? "1px solid rgba(20,184,166,0.3)" : "1px solid var(--border-color)",
-                                color: showVersionPanel ? "#5eead4" : "var(--text-primary)",
+                                color: showVersionPanel ? "var(--text-accent)" : "var(--text-primary)",
                             }}>
                                 <History size={14} /> History
                             </button>
@@ -515,7 +558,7 @@ export default function BuilderPage() {
                                     maxWidth: previewWidth === "100%" ? "none" : previewWidth,
                                     width: previewWidth === "100%" ? "100%" : previewWidth,
                                     margin: "0 auto", borderRadius: previewWidth === "100%" ? 0 : 20, overflow: "hidden",
-                                    background: "#0f0f1a", border: previewWidth === "100%" ? "none" : "1px solid rgba(255,255,255,0.08)",
+                                    background: "#0f0f1a", border: previewWidth === "100%" ? "none" : "1px solid rgba(var(--fg),0.08)",
                                     boxShadow: previewWidth === "100%" ? "none" : "0 24px 48px rgba(0,0,0,0.4)", minHeight: "60vh",
                                     display: "flex", flexDirection: "column", position: "relative",
                                     transition: "all 0.3s ease"
@@ -523,7 +566,7 @@ export default function BuilderPage() {
                                 {/* Browser chrome */}
                                 <div style={{
                                     display: "flex", alignItems: "center", padding: "14px 20px",
-                                    background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                                    background: "rgba(var(--fg),0.02)", borderBottom: "1px solid rgba(var(--fg),0.04)",
                                 }}>
                                     <div style={{ display: "flex", gap: 8, marginRight: 20 }}>
                                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f56" }} />
@@ -536,8 +579,8 @@ export default function BuilderPage() {
                                         <div style={{
                                             display: "flex", alignItems: "center", gap: 8,
                                             padding: "6px 20px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                                            background: "rgba(0,0,0,0.4)", color: "rgba(255,255,255,0.4)",
-                                            border: "1px solid rgba(255,255,255,0.04)",
+                                            background: "rgba(0,0,0,0.4)", color: "rgba(var(--fg),0.4)",
+                                            border: "1px solid rgba(var(--fg),0.04)",
                                         }}>
                                             <Globe size={12} />
                                             {currentPage.slug === "home" ? "yoursite.com" : `yoursite.com/${currentPage.slug}`}
@@ -596,7 +639,7 @@ export default function BuilderPage() {
                                                                     canEdit && dispatch(setSelectedSection(section.id));
                                                                 }}
                                                             >
-                                                                <Component props={section.props || {}} branding={tenant?.branding} websiteId={websiteId} allPages={pages} currentPage={currentPage} />
+                                                                <Component props={section.props || {}} branding={tenant?.branding} websiteId={websiteId} allPages={pages} currentPage={currentPage} onPageChange={handlePageSelect} />
                                                             </div>
                                                         )}
                                                     </Draggable>
@@ -608,8 +651,8 @@ export default function BuilderPage() {
                                                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                                                     padding: "80px 20px", textAlign: "center",
                                                 }}>
-                                                    <LayoutGrid size={40} style={{ color: "rgba(255,255,255,0.08)", marginBottom: 16 }} />
-                                                    <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 16, fontWeight: 600 }}>Page is empty. Add sections from the right panel.</p>
+                                                    <LayoutGrid size={40} style={{ color: "rgba(var(--fg),0.08)", marginBottom: 16 }} />
+                                                    <p style={{ color: "rgba(var(--fg),0.2)", fontSize: 16, fontWeight: 600 }}>Page is empty. Add sections from the right panel.</p>
                                                 </div>
                                             )}
                                         </div>
@@ -619,8 +662,8 @@ export default function BuilderPage() {
                         ) : (
                             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <div style={{ textAlign: "center" }}>
-                                    <FileText size={40} style={{ color: "rgba(255,255,255,0.1)", margin: "0 auto 12px" }} />
-                                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 16, fontWeight: 600 }}>Select a page to edit</p>
+                                    <FileText size={40} style={{ color: "rgba(var(--fg),0.1)", margin: "0 auto 12px" }} />
+                                    <p style={{ color: "rgba(var(--fg),0.25)", fontSize: 16, fontWeight: 600 }}>Select a page to edit</p>
                                 </div>
                             </div>
                         )}
@@ -644,58 +687,23 @@ export default function BuilderPage() {
                     }
                 />
 
-                {/* ====== 4. RIGHT — Add Section ====== */}
-                {
-                    canEdit && !isFullscreen && (
-                        <div style={{
-                            width: 200, minWidth: 150, maxWidth: 400, background: "var(--bg-surface)",
-                            borderLeft: "1px solid var(--border-color)", display: "flex", flexDirection: "column",
-                            resize: "horizontal", overflowX: "auto", flexShrink: 0, direction: "rtl"
-                        }}>
-                            <div style={{ direction: "ltr", display: "flex", flexDirection: "column", height: "100%" }}>
-                                <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-color)", flexShrink: 0 }}>
-                                    <h3 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)" }}>
-                                        Add Section
-                                    </h3>
-                                </div>
-                                <div style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                                    {SECTION_TYPES.map((type) => (
-                                        <button
-                                            key={type}
-                                            onClick={() => handleAddSection(type)}
-                                            style={{
-                                                width: "100%", display: "flex", alignItems: "center", gap: 12,
-                                                padding: "12px 14px", borderRadius: 12, fontSize: 13, fontWeight: 700,
-                                                textAlign: "left", cursor: "pointer", transition: "all 0.15s ease",
-                                                background: "var(--bg-input)", border: "1px solid var(--border-color)",
-                                                color: "var(--text-secondary)",
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.borderColor = SECTION_COLORS[type];
-                                                e.currentTarget.style.color = SECTION_COLORS[type];
-                                                e.currentTarget.style.background = `${SECTION_COLORS[type]}10`;
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.borderColor = "var(--border-color)";
-                                                e.currentTarget.style.color = "var(--text-secondary)";
-                                                e.currentTarget.style.background = "var(--bg-input)";
-                                            }}
-                                        >
-                                            <span style={{
-                                                width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                                                background: SECTION_COLORS[type], boxShadow: `0 0 10px ${SECTION_COLORS[type]}`,
-                                            }} />
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )
-                }
-
                 {/* ====== Floating Overlays ====== */}
                 {websiteId && <ChatPanel websiteId={websiteId} />}
+
+                {!isFullscreen && (
+                    <HelpAssistant
+                        position="bottom-left"
+                        context="website builder"
+                        topics={[
+                            "What is a Navbar, Hero and CTA?",
+                            "How do I edit an image in the navbar?",
+                            "What does the SEO button do?",
+                            "What is version History and how do I roll back?",
+                            "How do I add a new page?",
+                            "How do I add fields to a form?",
+                        ]}
+                    />
+                )}
 
                 {
                     showPublishModal && (

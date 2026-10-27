@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+// The four illustrated avatars shipped in the frontend (src/components/avatars).
+// We store only the KEY; the frontend maps it to the imported PNG asset.
+export const AVATAR_KEYS = ["boy", "pilot", "student", "gamer"];
+export const randomAvatar = () => AVATAR_KEYS[Math.floor(Math.random() * AVATAR_KEYS.length)];
+
 const UserSchema = new mongoose.Schema(
     {
         tenantId: {
@@ -19,6 +24,8 @@ const UserSchema = new mongoose.Schema(
         },
         isActive: { type: Boolean, default: true },
         invitedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        // Randomly assigned at creation (register + invite both go through this default).
+        avatar: { type: String, enum: AVATAR_KEYS, default: randomAvatar },
     },
     { timestamps: true }
 );

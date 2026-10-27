@@ -160,7 +160,7 @@ export default function RegisterPage() {
                         }}>
                             {loading ? (
                                 <span className="animate-spin" style={{
-                                    width: 16, height: 16, border: "2px solid rgba(255,255,255,0.35)",
+                                    width: 16, height: 16, border: "2px solid rgba(var(--fg),0.35)",
                                     borderTopColor: "#fff", borderRadius: "50%", display: "inline-block",
                                 }} />
                             ) : (
@@ -171,7 +171,7 @@ export default function RegisterPage() {
 
                     <p style={{ textAlign: "center", marginTop: 22, fontSize: 14, color: "var(--text-muted)" }}>
                         Already have a workspace?{" "}
-                        <Link to="/login" style={{ color: "#5eead4", textDecoration: "none", fontWeight: 600 }}>
+                        <Link to="/login" style={{ color: "var(--text-accent)", textDecoration: "none", fontWeight: 600 }}>
                             Sign in
                         </Link>
                     </p>

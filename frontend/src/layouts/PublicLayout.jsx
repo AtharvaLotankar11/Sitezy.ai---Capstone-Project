@@ -1,12 +1,30 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 import Logo from "../components/Logo.jsx";
+
+/* Smooth-scrolls to a #section when navigating to /page#section (and to top otherwise). */
+function ScrollToHash() {
+    const { pathname, hash } = useLocation();
+    useEffect(() => {
+        if (hash) {
+            const id = decodeURIComponent(hash.slice(1));
+            const t = setTimeout(() => {
+                const el = document.getElementById(id);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 80);
+            return () => clearTimeout(t);
+        }
+        window.scrollTo({ top: 0 });
+    }, [pathname, hash]);
+    return null;
+}
 
 /* ─── Shared CSS for the public navbar & footer ──────────────────────────── */
 export const PUBLIC_LAYOUT_STYLES = `
   .sp-nav-link {
     font-family: var(--font-display);
-    color: rgba(255,255,255,0.62);
+    color: rgba(var(--fg),0.62);
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -21,7 +39,7 @@ export const PUBLIC_LAYOUT_STYLES = `
     background: var(--grad-brand);
     transition: width 0.25s cubic-bezier(0.4,0,0.2,1);
   }
-  .sp-nav-link:hover { color: rgba(255,255,255,0.98); }
+  .sp-nav-link:hover { color: rgba(var(--fg),0.98); }
   .sp-nav-link:hover::after { width: 100%; }
 
   .sp-cta-primary {
@@ -29,7 +47,7 @@ export const PUBLIC_LAYOUT_STYLES = `
     font-family: var(--font-display);
     background: var(--grad-btn);
     color: #fff;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgba(var(--fg),0.12);
     padding: 10px 20px;
     border-radius: 100px;
     font-size: 13px;
@@ -41,24 +59,43 @@ export const PUBLIC_LAYOUT_STYLES = `
     gap: 6px;
     transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s ease;
     letter-spacing: -0.01em;
-    box-shadow: 0 4px 14px rgba(8,90,72,0.35), inset 0 1px 0 rgba(255,255,255,0.14);
+    box-shadow: 0 4px 14px rgba(8,90,72,0.35), inset 0 1px 0 rgba(var(--fg),0.14);
     overflow: hidden;
   }
-  .sp-cta-primary::before { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,255,255,0.10),transparent 50%); pointer-events:none; }
+  .sp-cta-primary::before { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(var(--fg),0.10),transparent 50%); pointer-events:none; }
   .sp-cta-primary:hover {
     transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 8px 22px rgba(8,90,72,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+    box-shadow: 0 8px 22px rgba(8,90,72,0.45), inset 0 1px 0 rgba(var(--fg),0.18);
   }
   .sp-cta-primary:active { transform: translateY(0) scale(0.99); }
+
+  /* Mobile nav burger + dropdown */
+  .sp-burger { display: none; width: 38px; height: 38px; border-radius: 100px; align-items: center; justify-content: center;
+    background: rgba(var(--fg),0.06); border: 1px solid var(--glass-border); color: rgba(var(--fg),0.9); cursor: pointer; }
+  .sp-mobile-menu { display: none; }
 
   /* ───── Responsive ───── */
   @media (max-width: 900px) {
     .sp-nav-center { display: none !important; }
+    .sp-burger { display: flex !important; }
     .sp-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
   }
   @media (max-width: 520px) {
     .sp-nav-signin { display: none !important; }
     .sp-footer-grid { grid-template-columns: 1fr 1fr !important; }
+  }
+  /* Compact footer on phones — the full 5-column footer is far too tall otherwise */
+  @media (max-width: 600px) {
+    .sp-footer { padding: 44px 7% 26px !important; }
+    .sp-footer-grid { gap: 24px 18px !important; }
+    .sp-footer-grid > div:first-child { grid-column: 1 / -1 !important; }
+    .sp-footer-bottom { margin-top: 26px !important; padding-top: 18px !important; flex-direction: column; align-items: flex-start !important; gap: 6px !important; }
+  }
+  /* Tighten the pill on phones so the CTA + burger never overflow off-screen */
+  @media (max-width: 440px) {
+    .sp-navbar { padding: 0 10px 0 14px !important; }
+    .sp-navbar .sp-cta-primary { padding: 9px 13px !important; font-size: 12px !important; }
+    .sp-burger { width: 34px !important; height: 34px !important; }
   }
 
   /* Auth split-screen — stack on small screens, hide showcase */
@@ -69,15 +106,23 @@ export const PUBLIC_LAYOUT_STYLES = `
 `;
 
 /* ─── Public Navbar ─────────────────────────────────────────────────────── */
+const NAV_LINKS = [["Features", "/features"], ["Pricing", "/product#pricing"], ["Docs", "/resources#documentation"], ["Blog", "/resources#blog"]];
+
 export function PublicNavbar({ scrolled }) {
+    const [open, setOpen] = useState(false);
+    const { pathname, hash } = useLocation();
+
+    // Close the mobile menu whenever the route changes.
+    useEffect(() => { setOpen(false); }, [pathname, hash]);
+
     return (
-        <nav style={{
+        <nav className="sp-navbar" style={{
             position: "fixed",
             top: scrolled ? 12 : 18,
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 100,
-            width: "min(1180px, calc(100% - 32px))",
+            width: "min(1180px, calc(100% - 24px))",
             padding: "0 12px 0 22px",
             height: 60,
             display: "flex",
@@ -89,8 +134,8 @@ export function PublicNavbar({ scrolled }) {
             border: "1px solid var(--glass-border)",
             borderRadius: 100,
             boxShadow: scrolled
-                ? "0 16px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)"
-                : "0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)",
+                ? "0 16px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(var(--fg),0.08)"
+                : "0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(var(--fg),0.06)",
             transition: "all 0.35s cubic-bezier(0.4,0,0.2,1)",
         }}>
             <Link to="/home" style={{ textDecoration: "none" }}>
@@ -99,8 +144,8 @@ export function PublicNavbar({ scrolled }) {
 
             {/* Center nav links — hidden on small viewports */}
             <div className="sp-nav-center" style={{ display: "flex", gap: 30, alignItems: "center" }}>
-                {["Features", "Pricing", "Docs", "Blog"].map((l) => (
-                    <a key={l} href="#" className="sp-nav-link">{l}</a>
+                {NAV_LINKS.map(([label, to]) => (
+                    <Link key={label} to={to} className="sp-nav-link">{label}</Link>
                 ))}
             </div>
 
@@ -109,28 +154,57 @@ export function PublicNavbar({ scrolled }) {
                 <Link to="/register" className="sp-cta-primary">
                     Get Started
                 </Link>
+                <button className="sp-burger" aria-label="Menu" onClick={() => setOpen((v) => !v)}>
+                    {open ? <X size={18} /> : <Menu size={18} />}
+                </button>
             </div>
+
+            {/* Mobile dropdown — only rendered when open (the .sp-burger media query
+                governs visibility of the trigger; this panel just follows that state). */}
+            {open && (
+                <div style={{
+                    position: "absolute", top: "calc(100% + 10px)", left: 0, right: 0,
+                    background: "var(--glass-bg-strong)", backdropFilter: "blur(28px) saturate(1.8)",
+                    WebkitBackdropFilter: "blur(28px) saturate(1.8)",
+                    border: "1px solid var(--glass-border)", borderRadius: 20,
+                    boxShadow: "0 16px 50px rgba(0,0,0,0.5)", padding: 10,
+                    display: "flex", flexDirection: "column", gap: 2,
+                }}>
+                    {NAV_LINKS.map(([label, to]) => (
+                        <Link key={label} to={to} onClick={() => setOpen(false)} style={{
+                            padding: "13px 16px", borderRadius: 12, textDecoration: "none",
+                            fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 500,
+                            color: "rgba(var(--fg),0.82)",
+                        }}>{label}</Link>
+                    ))}
+                    <Link to="/login" onClick={() => setOpen(false)} style={{
+                        padding: "13px 16px", borderRadius: 12, textDecoration: "none",
+                        fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 500,
+                        color: "rgba(var(--fg),0.82)", borderTop: "1px solid var(--glass-border)", marginTop: 4,
+                    }}>Sign in</Link>
+                </div>
+            )}
         </nav>
     );
 }
 
 /* ─── Public Footer ─────────────────────────────────────────────────────── */
 const FOOTER_COLUMNS = [
-    { title: "Product", links: ["Features", "Templates", "AI Builder", "Pricing", "Changelog"] },
-    { title: "Resources", links: ["Documentation", "Guides", "Blog", "Community", "Status"] },
-    { title: "Company", links: ["About", "Careers", "Contact", "Partners"] },
-    { title: "Legal", links: ["Privacy", "Terms", "Security", "Cookies"] },
+    { title: "Product", links: [["Features", "/product#features"], ["Templates", "/product#templates"], ["AI Builder", "/product#ai-builder"], ["Pricing", "/product#pricing"], ["Changelog", "/product#changelog"]] },
+    { title: "Resources", links: [["Documentation", "/resources#documentation"], ["Guides", "/resources#guides"], ["Blog", "/resources#blog"], ["Community", "/resources#community"], ["Status", "/resources#status"]] },
+    { title: "Company", links: [["About", "/company#about"], ["Careers", "/company#careers"], ["Contact", "/company#contact"]] },
+    { title: "Legal", links: [["Privacy", "/legal#privacy"], ["Terms", "/legal#terms"], ["Security", "/legal#security"], ["Cookies", "/legal#cookies"]] },
 ];
 
 function SocialIcon({ d }) {
     return (
         <a href="#" aria-label="social" style={{
             width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-            border: "1px solid var(--glass-border)", background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.6)",
+            border: "1px solid var(--glass-border)", background: "rgba(var(--fg),0.03)", color: "rgba(var(--fg),0.6)",
             transition: "all 0.2s ease",
         }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#5eead4"; e.currentTarget.style.borderColor = "rgba(45,212,191,0.4)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.6)"; e.currentTarget.style.borderColor = "var(--glass-border)"; }}>
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-accent)"; e.currentTarget.style.borderColor = "rgba(45,212,191,0.4)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(var(--fg),0.6)"; e.currentTarget.style.borderColor = "var(--glass-border)"; }}>
             <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 16, height: 16 }}><path d={d} /></svg>
         </a>
     );
@@ -138,39 +212,39 @@ function SocialIcon({ d }) {
 
 export function PublicFooter() {
     return (
-        <footer style={{ padding: "72px 5% 40px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "var(--bg-surface)", position: "relative", overflow: "hidden" }}>
+        <footer className="sp-footer" style={{ padding: "72px 5% 40px", borderTop: "1px solid rgba(var(--fg),0.06)", background: "var(--bg-surface)", position: "relative", overflow: "hidden" }}>
             <div className="sz-mesh sz-mesh-soft" style={{ opacity: 0.25 }} />
             <div className="sp-footer-grid" style={{ maxWidth: 1140, margin: "0 auto", position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "1.6fr repeat(4, 1fr)", gap: 40 }}>
                 {/* Brand */}
                 <div style={{ maxWidth: 280 }}>
                     <Logo size={34} fontSize={19} />
-                    <p style={{ marginTop: 18, fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.5)" }}>
+                    <p style={{ marginTop: 18, fontSize: 14, lineHeight: 1.7, color: "rgba(var(--fg),0.5)" }}>
                         The AI-powered website builder for modern teams. Design, collaborate, and launch — all in one place.
                     </p>
                     <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+                        {/* Facebook */}
                         <SocialIcon d="M22 12a10 10 0 1 0-11.5 9.9v-7H8v-2.9h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6v1.9H17l-.4 2.9h-2.1v7A10 10 0 0 0 22 12z" />
+                        {/* Instagram */}
+                        <SocialIcon d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm5.5-2.6a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z" />
+                        {/* Twitter / X */}
                         <SocialIcon d="M18.9 1.2h3.7l-8 9.2 9.5 12.5h-7.5l-5.8-7.7-6.7 7.7H.4l8.6-9.8L0 1.2h7.7l5.3 7 5.9-7zm-1.3 19.7h2L6.5 3.3H4.3l13.3 17.6z" />
-                        <SocialIcon d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.3-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1a9.3 9.3 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .3.3.7.9.7 1.9v2.8c0 .3.2.6.7.5 3.9-1.3 6.8-5.1 6.8-9.6C22 6.6 17.5 2 12 2z" />
-                        <SocialIcon d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.3 18.3H5.7V9.7h2.6v8.6zM7 8.6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11.3 9.7h-2.6v-4.2c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.3h-2.6V9.7h2.5v1.2h.1c.3-.6 1.2-1.4 2.5-1.4 2.7 0 3.2 1.8 3.2 4.1v4.7z" />
                     </div>
                 </div>
 
                 {/* Link columns */}
                 {FOOTER_COLUMNS.map((col) => (
                     <div key={col.title}>
-                        <div className="font-mono" style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>{col.title}</div>
+                        <div className="font-mono" style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(var(--fg),0.4)", marginBottom: 16 }}>{col.title}</div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                            {col.links.map((l) => (<a key={l} href="#" className="sp-nav-link" style={{ fontSize: 14 }}>{l}</a>))}
+                            {col.links.map(([label, to]) => (<Link key={label} to={to} className="sp-nav-link" style={{ fontSize: 14 }}>{label}</Link>))}
                         </div>
                     </div>
                 ))}
             </div>
 
-            <div style={{ maxWidth: 1140, margin: "40px auto 0", paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>© 2026 Sitezy.ai, Inc. All rights reserved.</span>
-                <span className="font-mono" style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} /> All systems operational
-                </span>
+            <div className="sp-footer-bottom" style={{ maxWidth: 1140, margin: "40px auto 0", paddingTop: 24, borderTop: "1px solid rgba(var(--fg),0.06)", position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <span style={{ fontSize: 13, color: "rgba(var(--fg),0.35)" }}>© 2026 Sitezy.ai, Inc. All rights reserved.</span>
+                <span className="font-mono" style={{ fontSize: 12, color: "rgba(var(--fg),0.3)" }}>Made with care by the Sitezy team.</span>
             </div>
         </footer>
     );
@@ -181,6 +255,14 @@ export default function PublicLayout() {
     const [scrolled, setScrolled] = useState(false);
     const glowRef = useRef(null);
     const dotRef = useRef(null);
+
+    // The marketing/auth pages are designed dark — force dark theme while mounted,
+    // then restore the user's chosen theme on unmount (so the app honors light mode).
+    useEffect(() => {
+        const prev = document.documentElement.getAttribute("data-theme") || "dark";
+        document.documentElement.setAttribute("data-theme", "dark");
+        return () => document.documentElement.setAttribute("data-theme", prev);
+    }, []);
 
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 20);
@@ -230,6 +312,7 @@ export default function PublicLayout() {
     return (
         <>
             <style>{PUBLIC_LAYOUT_STYLES}</style>
+            <ScrollToHash />
             <div ref={glowRef} className="sz-cursor-glow" aria-hidden="true" />
             <div ref={dotRef} className="sz-cursor-dot" aria-hidden="true" />
             <div style={{ minHeight: "100vh", background: "var(--bg-base)", display: "flex", flexDirection: "column" }}>

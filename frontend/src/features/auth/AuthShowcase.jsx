@@ -18,7 +18,7 @@ export default function AuthShowcase({ eyebrow, title, subtitle, bullets = [] })
             <div style={{
                 position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.5,
                 backgroundImage:
-                    "linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px)",
+                    "linear-gradient(rgba(var(--fg),0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--fg),0.04) 1px,transparent 1px)",
                 backgroundSize: "40px 40px",
                 WebkitMaskImage: "radial-gradient(ellipse 90% 70% at 30% 20%, #000, transparent)",
                 maskImage: "radial-gradient(ellipse 90% 70% at 30% 20%, #000, transparent)",
@@ -32,7 +32,7 @@ export default function AuthShowcase({ eyebrow, title, subtitle, bullets = [] })
             {/* Copy */}
             <div style={{ position: "relative", zIndex: 1 }}>
                 {eyebrow && (
-                    <div className="sz-eyebrow" style={{ color: "#5eead4", marginBottom: 16 }}>
+                    <div className="sz-eyebrow" style={{ color: "var(--text-accent)", marginBottom: 16 }}>
                         {eyebrow}
                     </div>
                 )}
@@ -42,7 +42,7 @@ export default function AuthShowcase({ eyebrow, title, subtitle, bullets = [] })
                 }}>
                     {title}
                 </h2>
-                <p style={{ fontSize: 15, lineHeight: 1.6, color: "rgba(255,255,255,0.6)", maxWidth: 340 }}>
+                <p style={{ fontSize: 15, lineHeight: 1.6, color: "rgba(var(--fg),0.6)", maxWidth: 340 }}>
                     {subtitle}
                 </p>
             </div>
@@ -55,11 +55,11 @@ export default function AuthShowcase({ eyebrow, title, subtitle, bullets = [] })
                             width: 32, height: 32, borderRadius: 9, flexShrink: 0,
                             display: "flex", alignItems: "center", justifyContent: "center",
                             background: "rgba(20,184,166,0.16)", border: "1px solid rgba(20,184,166,0.34)",
-                            color: "#5eead4",
+                            color: "var(--text-accent)",
                         }}>
                             {b.icon}
                         </div>
-                        <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(255,255,255,0.82)" }}>{b.text}</span>
+                        <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(var(--fg),0.82)" }}>{b.text}</span>
                     </div>
                 ))}
             </div>

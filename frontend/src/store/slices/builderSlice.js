@@ -28,6 +28,15 @@ export const createPage = createAsyncThunk("builder/createPage", async ({ websit
     }
 });
 
+export const createAiPage = createAsyncThunk("builder/createAiPage", async ({ websiteId, title }, { rejectWithValue }) => {
+    try {
+        const res = await api.post(`/builder/websites/${websiteId}/pages/ai`, { title });
+        return res.data.page;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || "Failed to add page");
+    }
+});
+
 export const deletePage = createAsyncThunk("builder/deletePage", async ({ websiteId, pageId }, { rejectWithValue }) => {
     try {
         await api.delete(`/builder/websites/${websiteId}/pages/${pageId}`);
@@ -140,6 +149,7 @@ const builderSlice = createSlice({
             .addCase(fetchPages.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
             .addCase(fetchPage.fulfilled, (state, action) => { state.currentPage = action.payload; })
             .addCase(createPage.fulfilled, (state, action) => { state.pages.push(action.payload); })
+            .addCase(createAiPage.fulfilled, (state, action) => { state.pages.push(action.payload); })
             .addCase(deletePage.fulfilled, (state, action) => {
                 state.pages = state.pages.filter((p) => p._id !== action.payload);
             })

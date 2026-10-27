@@ -143,7 +143,8 @@ def zero_shot_classify(prompt, candidate_labels):
             logits = nli_model(**inputs).logits
             probs = torch.softmax(logits, dim=1)
 
-            entailment_score = probs[0][2].item()
+            # id2label for cross-encoder/nli-MiniLM2-L6-H768: 0=contradiction, 1=entailment, 2=neutral
+            entailment_score = probs[0][1].item()
 
         scores.append(entailment_score)
 

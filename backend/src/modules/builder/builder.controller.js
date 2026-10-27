@@ -3,6 +3,117 @@ import Website from "../website/website.model.js";
 import Commit from "./commit.model.js";
 import { logActivity } from "../../middleware/logger.middleware.js";
 import { v4 as uuidv4 } from "uuid";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Ollama } from "ollama";
+
+const _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const _gemini = _genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+const _ollama = new Ollama({ host: process.env.OLLAMA_HOST || "http://127.0.0.1:11434" });
+
+const _slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "page";
+
+// Build {label,url} nav links for the full set of pages (home first).
+function buildNavLinks(pages) {
+    return [...pages]
+        .sort((a, b) => (b.isHomePage ? 1 : 0) - (a.isHomePage ? 1 : 0))
+        .map((p) => ({ label: p.title, url: p.isHomePage ? "/" : `/${p.slug}` }));
+}
+
+// Ask the model to pick the best existing page to base the new one on, and write
+// fresh copy for its key text fields. Qwen first, Gemini fallback, heuristic last.
+async function aiChoosePageTemplate(title, candidates) {
+    const prompt = `A user is adding a new page titled "${title}" to their website. Pick which existing page's layout is the best starting template, and write fresh copy for the new page.
+
+Existing pages (slug — section types):
+${candidates.map((c) => `- ${c.slug}${c.isHomePage ? " (home)" : ""} — [${c.sectionTypes.join(", ")}]`).join("\n")}
+
+Return ONLY JSON (no markdown):
+{ "sourceSlug": "<slug of the page to clone>", "heroHeading": "<headline for the new page>", "heroSubheading": "<one-line subheading>", "textHeading": "<a section heading>", "textBody": "<2-3 sentence paragraph for the new page>" }`;
+    let text = "";
+    try {
+        const r = await _ollama.chat({
+            model: "qwen3.5:4b", think: false,
+            messages: [{ role: "system", content: "You output only strict valid JSON." }, { role: "user", content: prompt }],
+            format: "json", options: { num_predict: 600, temperature: 0.5 },
+        });
+        text = r.message?.content || "";
+    } catch {
+        try { const r = await _gemini.generateContent(prompt); text = r.response.text(); } catch { /* heuristic fallback */ }
+    }
+    try {
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) return JSON.parse(m[0]);
+    } catch { /* ignore */ }
+    return null;
+}
+
+/**
+ * POST /api/builder/websites/:websiteId/pages/ai
+ * Add a new page whose layout is chosen by AI (cloned from the most suitable existing
+ * page) with fresh AI copy, and auto-link it into every page's navbar.
+ */
+export const addAiPage = async (req, res) => {
+    const website = await Website.findOne({ _id: req.params.websiteId, ...req.tenantFilter }).lean();
+    if (!website) return res.status(404).json({ success: false, message: "Website not found" });
+
+    const title = (req.body.title || "").trim();
+    if (!title) return res.status(400).json({ success: false, message: "Page title is required" });
+
+    const pages = await Page.find({ websiteId: website._id, tenantId: req.tenantId });
+    if (!pages.length) return res.status(400).json({ success: false, message: "Create the site first, then add pages." });
+
+    // unique slug
+    let base = _slugify(title), slug = base, n = 1;
+    while (pages.some((p) => p.slug === slug)) slug = `${base}-${++n}`;
+
+    // choose a source template + copy via AI (best-effort)
+    const candidates = pages.map((p) => ({ slug: p.slug, isHomePage: p.isHomePage, sectionTypes: (p.layoutConfig?.sections || []).map((s) => s.type) }));
+    const ai = await aiChoosePageTemplate(title, candidates);
+
+    const source = pages.find((p) => p.slug === ai?.sourceSlug)
+        || pages.find((p) => !p.isHomePage)
+        || pages.find((p) => p.isHomePage)
+        || pages[0];
+
+    // clone the source layout with fresh section ids
+    const sections = JSON.parse(JSON.stringify(source.layoutConfig?.sections || []));
+    let heroDone = false, textDone = false;
+    for (const s of sections) {
+        s.id = uuidv4();
+        const p = s.props || (s.props = {});
+        if (s.type === "Hero" && !heroDone) {
+            if (ai?.heroHeading) p.heading = ai.heroHeading; else p.heading = title;
+            if (ai?.heroSubheading) p.subheading = ai.heroSubheading;
+            heroDone = true;
+        } else if (s.type === "Text" && !textDone) {
+            if (ai?.textHeading) p.heading = ai.textHeading;
+            if (ai?.textBody) p.description = ai.textBody;
+            textDone = true;
+        }
+    }
+
+    // the new page exists now → recompute nav links for ALL pages and apply everywhere
+    const allMeta = [...pages.map((p) => ({ title: p.title, slug: p.slug, isHomePage: p.isHomePage })), { title, slug, isHomePage: false }];
+    const navLinks = buildNavLinks(allMeta);
+    const applyNav = (secs) => { const nav = (secs || []).find((s) => s.type === "Navbar"); if (nav) { nav.props = nav.props || {}; nav.props.links = navLinks; } };
+    applyNav(sections);
+
+    const page = await Page.create({
+        tenantId: req.tenantId, websiteId: website._id, title, slug, isHomePage: false,
+        layoutConfig: { sections }, createdBy: req.user._id,
+    });
+
+    // update every existing page's navbar so the new page appears site-wide
+    for (const p of pages) {
+        applyNav(p.layoutConfig?.sections);
+        p.markModified("layoutConfig");
+        await p.save();
+    }
+
+    await logActivity({ tenantId: req.tenantId, userId: req.user._id, action: "PAGE_CREATED", resource: "Page", resourceId: page._id, details: { title, slug, ai: !!ai }, ip: req.ip }).catch(() => {});
+
+    res.status(201).json({ success: true, page });
+};
 
 /**
  * GET /api/builder/websites/:websiteId/pages

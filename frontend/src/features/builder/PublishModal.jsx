@@ -71,16 +71,10 @@ export default function PublishModal({ websiteId, onClose }) {
         }}>
             <div style={{
                 width: "100%", maxWidth: 480, padding: 36, borderRadius: 24,
-                background: "var(--bg-card)", border: "1px solid rgba(255,255,255,0.1)",
+                background: "var(--bg-card)", border: "1px solid rgba(var(--fg),0.1)",
                 boxShadow: "0 24px 48px rgba(0,0,0,0.5)", position: "relative",
                 overflow: "hidden", maxHeight: "90vh", display: "flex", flexDirection: "column",
             }}>
-                {/* Top accent bar */}
-                <div style={{
-                    position: "absolute", top: 0, left: 0, right: 0, height: 3,
-                    background: "linear-gradient(90deg, #10b981, #34d399, #14b8a6)",
-                }} />
-
                 {/* Header */}
                 <div style={{
                     display: "flex", alignItems: "flex-start", justifyContent: "space-between",
@@ -101,7 +95,7 @@ export default function PublishModal({ websiteId, onClose }) {
                                 Publish Website
                             </h2>
                         </div>
-                        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.4)", paddingLeft: 52 }}>
+                        <p style={{ fontSize: 14, color: "rgba(var(--fg),0.4)", paddingLeft: 52 }}>
                             Deploy your website live. Choose a domain below.
                         </p>
                     </div>
@@ -118,7 +112,7 @@ export default function PublishModal({ websiteId, onClose }) {
                     <label style={{
                         display: "block", fontSize: 12, fontWeight: 800,
                         textTransform: "uppercase", letterSpacing: "0.1em",
-                        color: "rgba(255,255,255,0.4)", marginBottom: 10,
+                        color: "rgba(var(--fg),0.4)", marginBottom: 10,
                     }}>
                         Select Domain
                     </label>
@@ -126,15 +120,15 @@ export default function PublishModal({ websiteId, onClose }) {
                     {verifiedDomains.length === 0 ? (
                         <div style={{
                             padding: "20px 16px", borderRadius: 14,
-                            background: "rgba(255,255,255,0.03)",
-                            border: "1px dashed rgba(255,255,255,0.1)",
+                            background: "rgba(var(--fg),0.03)",
+                            border: "1px dashed rgba(var(--fg),0.1)",
                             textAlign: "center",
                         }}>
-                            <Globe size={24} style={{ color: "rgba(255,255,255,0.1)", margin: "0 auto 8px" }} />
-                            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, fontWeight: 500 }}>
+                            <Globe size={24} style={{ color: "rgba(var(--fg),0.1)", margin: "0 auto 8px" }} />
+                            <p style={{ color: "rgba(var(--fg),0.3)", fontSize: 13, fontWeight: 500 }}>
                                 No verified domains found. The default workspace domain will be used.
                             </p>
-                            <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginTop: 4 }}>
+                            <p style={{ color: "rgba(var(--fg),0.2)", fontSize: 11, marginTop: 4 }}>
                                 Add domains in Settings → Custom Domains
                             </p>
                         </div>
@@ -152,24 +146,24 @@ export default function PublishModal({ websiteId, onClose }) {
                                 style={{
                                     display: "flex", alignItems: "center", gap: 12,
                                     padding: "14px 16px", borderRadius: 14,
-                                    background: !selectedDomainId ? "rgba(20,184,166,0.08)" : "rgba(255,255,255,0.02)",
+                                    background: !selectedDomainId ? "rgba(20,184,166,0.08)" : "rgba(var(--fg),0.02)",
                                     border: !selectedDomainId
                                         ? "2px solid rgba(20,184,166,0.4)"
-                                        : "1px solid rgba(255,255,255,0.06)",
+                                        : "1px solid rgba(var(--fg),0.06)",
                                     cursor: "pointer", textAlign: "left", width: "100%",
                                     color: "var(--text-primary)",
                                 }}
                             >
                                 <div style={{
                                     width: 36, height: 36, borderRadius: 10,
-                                    background: "rgba(255,255,255,0.05)",
+                                    background: "rgba(var(--fg),0.05)",
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                 }}>
-                                    <Globe size={16} style={{ color: "rgba(255,255,255,0.4)" }} />
+                                    <Globe size={16} style={{ color: "rgba(var(--fg),0.4)" }} />
                                 </div>
                                 <div style={{ flex: 1 }}>
                                     <p style={{ fontSize: 14, fontWeight: 700 }}>Default Domain</p>
-                                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+                                    <p style={{ fontSize: 12, color: "rgba(var(--fg),0.3)" }}>
                                         Use workspace default domain
                                     </p>
                                 </div>
@@ -191,27 +185,27 @@ export default function PublishModal({ websiteId, onClose }) {
                                         style={{
                                             display: "flex", alignItems: "center", gap: 12,
                                             padding: "14px 16px", borderRadius: 14,
-                                            background: isSelected ? "rgba(16,185,129,0.08)" : (isUsedByOther ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.02)"),
+                                            background: isSelected ? "rgba(16,185,129,0.08)" : (isUsedByOther ? "rgba(var(--fg),0.01)" : "rgba(var(--fg),0.02)"),
                                             border: isSelected
                                                 ? "2px solid rgba(16,185,129,0.4)"
-                                                : "1px solid rgba(255,255,255,0.06)",
+                                                : "1px solid rgba(var(--fg),0.06)",
                                             cursor: isUsedByOther ? "not-allowed" : "pointer", textAlign: "left", width: "100%",
-                                            color: isUsedByOther ? "rgba(255,255,255,0.3)" : "var(--text-primary)",
+                                            color: isUsedByOther ? "rgba(var(--fg),0.3)" : "var(--text-primary)",
                                             opacity: isUsedByOther ? 0.6 : 1,
                                         }}
                                     >
                                         <div style={{
                                             width: 36, height: 36, borderRadius: 10,
-                                            background: isSelected ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.05)",
+                                            background: isSelected ? "rgba(16,185,129,0.12)" : "rgba(var(--fg),0.05)",
                                             display: "flex", alignItems: "center", justifyContent: "center",
                                         }}>
                                             <Globe size={16} style={{
-                                                color: isSelected ? "#10b981" : "rgba(255,255,255,0.4)"
+                                                color: isSelected ? "#10b981" : "rgba(var(--fg),0.4)"
                                             }} />
                                         </div>
                                         <div style={{ flex: 1 }}>
                                             <p style={{ fontSize: 14, fontWeight: 700 }}>{domain.domain}</p>
-                                            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+                                            <p style={{ fontSize: 12, color: "rgba(var(--fg),0.3)" }}>
                                                 {isUsedByOther ? `In use by ${usedSite ? usedSite.name : 'another project'}` : "Available ✓"}
                                             </p>
                                         </div>
@@ -239,15 +233,14 @@ export default function PublishModal({ websiteId, onClose }) {
                         onClick={handlePublish}
                         disabled={publishing}
                         style={{
-                            flex: 2, padding: 14, borderRadius: 14, border: "none",
-                            background: publishing
-                                ? "rgba(255,255,255,0.05)"
-                                : "linear-gradient(135deg, #10b981, #34d399)",
-                            color: publishing ? "rgba(255,255,255,0.3)" : "white",
+                            flex: 2, padding: 14, borderRadius: 14,
+                            border: publishing ? "1px solid var(--border-color)" : "1px solid rgba(var(--fg),0.12)",
+                            background: publishing ? "rgba(var(--fg),0.05)" : "var(--grad-btn)",
+                            color: publishing ? "rgba(var(--fg),0.3)" : "#fff",
                             cursor: publishing ? "not-allowed" : "pointer",
-                            fontSize: 15, fontWeight: 700,
+                            fontSize: 15, fontWeight: 600, fontFamily: "var(--font-display)",
                             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                            boxShadow: publishing ? "none" : "0 6px 20px rgba(16,185,129,0.3)",
+                            boxShadow: publishing ? "none" : "0 5px 16px rgba(8,90,72,0.35), inset 0 1px 0 rgba(var(--fg),0.14)",
                         }}
                     >
                         {publishing ? (

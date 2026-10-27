@@ -15,18 +15,20 @@ import logoSrc from "./sitezy_logo.png";
 export default function Logo({ size = 34, showWord = true, wordColor = "#fff", fontSize = 19 }) {
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img
-                src={logoSrc}
-                alt="Sitezy"
-                width={size}
-                height={size}
-                style={{
-                    width: size, height: size, flexShrink: 0,
-                    objectFit: "contain",
-                    mixBlendMode: "screen",
-                    filter: "drop-shadow(0 2px 8px rgba(45,212,191,0.35))",
-                }}
-            />
+            <span className="sz-logo-chip">
+                <img
+                    src={logoSrc}
+                    alt="Sitezy"
+                    width={size}
+                    height={size}
+                    style={{
+                        width: size, height: size, flexShrink: 0,
+                        objectFit: "contain",
+                        mixBlendMode: "screen",
+                        filter: "drop-shadow(0 2px 8px rgba(45,212,191,0.35))",
+                    }}
+                />
+            </span>
             {showWord && (
                 <span
                     className="font-display"

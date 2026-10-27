@@ -3,7 +3,6 @@ import axios from "axios";
 const api = axios.create({
     baseURL: "/api",
     headers: { "Content-Type": "application/json" },
-    timeout: 300000, // 5 minutes timeout for long-running AI analytics
 });
 
 // Attach JWT token to every request

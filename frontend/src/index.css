@@ -15,6 +15,10 @@
   --color-secondary: #9aa6a4;
   --color-accent: #06b6d4;
 
+  /* Foreground RGB channel — every rgba(var(--fg), a) overlay (text/border/surface)
+     flips automatically when this changes for light mode. */
+  --fg: 255, 255, 255;
+
   /* Brand spectrum */
   --brand-blue: #2563eb;
   --brand-sky: #38bdf8;
@@ -45,6 +49,7 @@
   --bg-card: #0c1317;
   --bg-elevated: #121b20;
   --bg-input: #070c0e;
+  --thumb-base: #0a0e14;   /* project-card preview banner base */
 
   /* Glass */
   --glass-bg: rgba(12, 22, 26, 0.55);
@@ -63,6 +68,9 @@
   --text-secondary: #9aa6a4;
   --text-muted: #647070;
   --text-accent: #5eead4;
+  /* Accent foregrounds (darken for light theme so they stay legible) */
+  --accent-violet: #c084fc;
+  --accent-sky: #7dd3fc;
 
   /* Radius */
   --radius: 12px;
@@ -80,6 +88,63 @@
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+/* ───────────────────────── LIGHT THEME ─────────────────────────
+   Flipping --fg to a dark value re-tints every rgba(var(--fg), a) overlay
+   (text, borders, subtle surfaces) used across the app, and the named tokens
+   below recolor the solid surfaces, glass, and shadows. Brand colors stay. */
+:root[data-theme="light"] {
+  --fg: 17, 24, 28;
+
+  --color-primary: #0f1719;
+  --color-primary-hover: #000000;
+  --color-secondary: #475055;
+
+  --bg-base: #eef1f4;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #f1f4f6;
+  --thumb-base: #dde3ea;
+
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-bg-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(17, 24, 28, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+
+  --border-color: rgba(17, 24, 28, 0.12);
+  --border-light: rgba(17, 24, 28, 0.07);
+  --border-hover: rgba(17, 24, 28, 0.28);
+  --border-brand: rgba(13, 148, 136, 0.45);
+
+  --text-primary: #0f1719;
+  --text-secondary: #455055;
+  --text-muted: #7b878c;
+  --text-accent: #0d9488;
+  --accent-violet: #7c3aed;
+  --accent-sky: #0369a1;
+
+  --shadow-card: 0 10px 36px rgba(17, 24, 28, 0.10);
+  --shadow-elevated: 0 26px 72px rgba(17, 24, 28, 0.14);
+  --shadow-brand: 0 14px 40px rgba(13, 148, 136, 0.28);
+  --shadow-glass: 0 16px 44px rgba(17, 24, 28, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+/* Light-mode fixes for fixed-dark utility surfaces (these classes are intentionally
+   dark in the dark theme; recolor them so text stays legible in light). */
+:root[data-theme="light"] .sz-btn-soft {
+  background: #eceff3;
+  border-color: rgba(17, 24, 28, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(17, 24, 28, 0.06);
+}
+:root[data-theme="light"] .sz-btn-soft:hover { background: #e1e6ec; }
+:root[data-theme="light"] .saas-button-secondary { background: rgba(17, 24, 28, 0.04); }
+:root[data-theme="light"] .saas-button-secondary:hover { background: rgba(17, 24, 28, 0.09); }
+
+/* Logo mark: the PNG has a dark backdrop dropped via mix-blend-mode:screen, which is
+   invisible on a light navbar — so in light mode we sit it on a small dark chip. */
+.sz-logo-chip { display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; }
+:root[data-theme="light"] .sz-logo-chip { background: #0c1317; padding: 3px; }
 
 * {
   box-sizing: border-box;
@@ -126,6 +191,11 @@ body {
 /* ============================================================
    TYPE HELPERS
    ============================================================ */
+/* Headings default to the display typeface (Space Grotesk) so every title in the
+   app chrome reads consistently — the same font as the project-card titles, not the
+   plain body font. Inline font-family (e.g. generated sites in the renderer) still wins. */
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); }
+
 .font-display { font-family: var(--font-display); letter-spacing: -0.03em; }
 .font-serif   { font-family: var(--font-serif); }
 .font-mono    { font-family: var(--font-mono); }

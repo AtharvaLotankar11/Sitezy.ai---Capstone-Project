@@ -1,6 +1,10 @@
 import Website from "./website.model.js";
 import Page from "../builder/page.model.js";
 import Deployment from "../deployment/deployment.model.js";
+import Domain from "../domain/domain.model.js";
+import Tenant from "../tenant/tenant.model.js";
+import { searchUnsplash } from "../../services/unsplash.service.js";
+import { buildSiteFiles, zipStore } from "./siteExporter.js";
 import { logActivity } from "../../middleware/logger.middleware.js";
 import { createWebsiteSchema, updateWebsiteSchema } from "./website.validation.js";
 import { websitePublishTotal, tenantWebsitesTotal } from "../../utils/metrics.js";
@@ -127,8 +131,15 @@ export const deleteWebsite = async (req, res) => {
     const website = await Website.findOne({ _id: req.params.id, ...req.tenantFilter });
     if (!website) return res.status(404).json({ success: false, message: "Website not found" });
 
-    // Cascade delete pages
+    // Cascade delete all data owned by this website…
     await Page.deleteMany({ websiteId: website._id, tenantId: req.tenantId });
+    await Deployment.deleteMany({ websiteId: website._id, tenantId: req.tenantId });
+    // …and FREE (un-allocate) any custom domains pointed at it so they can be reused.
+    // Default subdomains stay attached to the tenant; only custom links are released.
+    await Domain.updateMany(
+        { websiteId: website._id, tenantId: req.tenantId, isDefault: { $ne: true } },
+        { $set: { websiteId: null } }
+    );
     await website.deleteOne();
 
     await logActivity({
@@ -141,6 +152,52 @@ export const deleteWebsite = async (req, res) => {
     });
 
     res.json({ success: true, message: "Website deleted" });
+};
+
+/**
+ * GET /api/websites/:id/export
+ * Generate a self-contained static site (HTML + inline CSS) from the project's pages —
+ * applied colors, fonts, AI-written copy, and resolved Unsplash images — as a .zip.
+ */
+export const exportWebsite = async (req, res) => {
+    const website = await Website.findOne({ _id: req.params.id, ...req.tenantFilter });
+    if (!website) return res.status(404).json({ success: false, message: "Website not found" });
+
+    const tenant = await Tenant.findById(req.tenantId).lean();
+    const branding = tenant?.branding || {};
+
+    const pages = await Page.find({ websiteId: website._id, tenantId: req.tenantId }).lean();
+    if (!pages.length) return res.status(400).json({ success: false, message: "This project has no pages to export yet." });
+
+    // Resolve image props that are still keyword queries (not URLs) into real Unsplash URLs.
+    const isUrl = (s) => typeof s === "string" && /^https?:\/\//.test(s);
+    const tasks = [];
+    const resolve = async (assign, q, w, h) => {
+        if (!q || isUrl(q)) { if (isUrl(q)) assign(q); return; }
+        try { const url = await searchUnsplash(q, w, h); if (url) assign(url); } catch { /* leave → gradient fallback */ }
+    };
+    for (const pg of pages) {
+        for (const s of (pg.layoutConfig?.sections || [])) {
+            const p = s.props || {};
+            if (s.type === "Hero" && !isUrl(p.backgroundImage)) tasks.push(resolve((u) => { p.backgroundImage = u; }, p.backgroundImage || p.backgroundImageQuery, 1600, 900));
+            if (s.type === "Gallery") for (const it of (p.items || [])) { if (it && typeof it === "object" && !isUrl(it.image)) tasks.push(resolve((u) => { it.image = u; }, it.image || it.imageQuery || it.title, 640, 480)); }
+            if (s.type === "Image" && !isUrl(p.image) && !isUrl(p.src)) tasks.push(resolve((u) => { p.image = u; }, p.image || p.src || p.imageQuery, 1200, 800));
+        }
+    }
+    await Promise.all(tasks);
+
+    const files = buildSiteFiles(website, branding, pages);
+    const zip = zipStore(files);
+    const fname = (website.slug || website.name || "site").toString().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+
+    await logActivity({
+        tenantId: req.tenantId, userId: req.user._id, action: "WEBSITE_EXPORTED",
+        resource: "Website", resourceId: website._id, ip: req.ip,
+    }).catch(() => {});
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${fname}-site.zip"`);
+    return res.send(zip);
 };
 
 /**

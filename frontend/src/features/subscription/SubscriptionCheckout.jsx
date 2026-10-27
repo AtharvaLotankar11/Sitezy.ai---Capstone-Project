@@ -127,7 +127,7 @@ const SubscriptionCheckout = ({ plan, onSuccess, onClose }) => {
                         position: "absolute",
                         top: 20,
                         right: 20,
-                        background: "rgba(255,255,255,0.05)",
+                        background: "rgba(var(--fg),0.05)",
                         border: "1px solid var(--border-color)",
                         borderRadius: 12,
                         width: 40,
@@ -140,11 +140,11 @@ const SubscriptionCheckout = ({ plan, onSuccess, onClose }) => {
                         transition: "all 0.2s ease",
                     }}
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+                        e.currentTarget.style.background = "rgba(var(--fg),0.1)";
                         e.currentTarget.style.color = "var(--text-primary)";
                     }}
                     onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                        e.currentTarget.style.background = "rgba(var(--fg),0.05)";
                         e.currentTarget.style.color = "var(--text-secondary)";
                     }}
                 >
@@ -158,26 +158,15 @@ const SubscriptionCheckout = ({ plan, onSuccess, onClose }) => {
                             width: 64,
                             height: 64,
                             borderRadius: 16,
-                            background: "#14b8a6",
+                            background: "linear-gradient(135deg, var(--color-primary), var(--color-secondary))",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             margin: "0 auto 20px",
-                            boxShadow: "0 0 0 0 rgba(20,184,166,0.4), 0 8px 24px rgba(20,184,166,0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
-                            position: "relative",
+                            boxShadow: "0 8px 24px rgba(20,184,166,0.3)",
                         }}
                     >
-                        <CreditCard size={32} color="white" strokeWidth={2.5} />
-                        <div
-                            style={{
-                                position: "absolute",
-                                inset: -2,
-                                borderRadius: 16,
-                                background: "linear-gradient(135deg, rgba(20,184,166,0.5), rgba(16,185,129,0.3))",
-                                filter: "blur(8px)",
-                                zIndex: -1,
-                            }}
-                        />
+                        <CreditCard size={32} color="white" strokeWidth={2} />
                     </div>
                     <h2
                         style={{
@@ -198,7 +187,7 @@ const SubscriptionCheckout = ({ plan, onSuccess, onClose }) => {
                 {/* Plan details */}
                 <div
                     style={{
-                        background: "rgba(255,255,255,0.03)",
+                        background: "rgba(var(--fg),0.03)",
                         border: "1px solid var(--border-color)",
                         borderRadius: 16,
                         padding: 24,
@@ -258,30 +247,25 @@ const SubscriptionCheckout = ({ plan, onSuccess, onClose }) => {
                         cursor: loading ? "not-allowed" : "pointer",
                         background: loading
                             ? "var(--bg-input)"
-                            : "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%)",
+                            : "linear-gradient(135deg, var(--color-primary), var(--color-secondary))",
                         color: "white",
-                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                        transition: "all 0.2s ease",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         gap: 10,
                         opacity: loading ? 0.6 : 1,
-                        boxShadow: loading ? "none" : "0 4px 16px rgba(14,165,233,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-                        position: "relative",
-                        overflow: "hidden",
                     }}
                     onMouseEnter={(e) => {
                         if (!loading) {
                             e.currentTarget.style.transform = "translateY(-2px)";
-                            e.currentTarget.style.boxShadow = "0 8px 28px rgba(14,165,233,0.45), 0 4px 12px rgba(6,182,212,0.3), inset 0 1px 0 rgba(255,255,255,0.25)";
-                            e.currentTarget.style.background = "linear-gradient(135deg, #0284c7 0%, #0891b2 50%, #0d9488 100%)";
+                            e.currentTarget.style.boxShadow = "0 8px 24px rgba(20,184,166,0.4)";
                         }
                     }}
                     onMouseLeave={(e) => {
                         if (!loading) {
                             e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow = "0 4px 16px rgba(14,165,233,0.3), inset 0 1px 0 rgba(255,255,255,0.2)";
-                            e.currentTarget.style.background = "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%)";
+                            e.currentTarget.style.boxShadow = "none";
                         }
                     }}
                 >

@@ -73,14 +73,14 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                 flexShrink: 0,
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <History size={15} style={{ color: "#5eead4" }} />
+                    <History size={15} style={{ color: "var(--text-accent)" }} />
                     <h3 style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
                         Version History
                     </h3>
                 </div>
                 <button onClick={onClose} style={{
                     background: "none", border: "none", cursor: "pointer",
-                    color: "rgba(255,255,255,0.4)", padding: 4,
+                    color: "rgba(var(--fg),0.4)", padding: 4,
                 }}>
                     <X size={16} />
                 </button>
@@ -93,7 +93,7 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
             }}>
                 <label style={{
                     fontSize: 10, fontWeight: 800, textTransform: "uppercase",
-                    letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)",
+                    letterSpacing: "0.1em", color: "rgba(var(--fg),0.35)",
                     display: "block", marginBottom: 8,
                 }}>
                     Create Commit
@@ -117,8 +117,8 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                             padding: "9px 14px", borderRadius: 10, border: "none",
                             background: commitMsg.trim()
                                 ? "linear-gradient(135deg, #14b8a6, #0ea5e9)"
-                                : "rgba(255,255,255,0.05)",
-                            color: commitMsg.trim() ? "white" : "rgba(255,255,255,0.2)",
+                                : "rgba(var(--fg),0.05)",
+                            color: commitMsg.trim() ? "white" : "rgba(var(--fg),0.2)",
                             cursor: commitMsg.trim() ? "pointer" : "default",
                             display: "flex", alignItems: "center", gap: 5,
                             fontSize: 12, fontWeight: 700, flexShrink: 0,
@@ -129,7 +129,7 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                         Commit
                     </button>
                 </div>
-                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 6 }}>
+                <p style={{ fontSize: 10, color: "rgba(var(--fg),0.25)", marginTop: 6 }}>
                     Current: <strong>v{currentPage?.version || 0}</strong>
                 </p>
             </div>
@@ -138,12 +138,12 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
             <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }}>
                 {commitsLoading ? (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-                        <Loader2 size={20} className="animate-spin" style={{ color: "rgba(255,255,255,0.2)" }} />
+                        <Loader2 size={20} className="animate-spin" style={{ color: "rgba(var(--fg),0.2)" }} />
                     </div>
                 ) : commits.length === 0 ? (
                     <div style={{ textAlign: "center", padding: "32px 12px" }}>
-                        <GitCommitHorizontal size={28} style={{ color: "rgba(255,255,255,0.08)", margin: "0 auto 10px" }} />
-                        <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 12, fontWeight: 500 }}>
+                        <GitCommitHorizontal size={28} style={{ color: "rgba(var(--fg),0.08)", margin: "0 auto 10px" }} />
+                        <p style={{ color: "rgba(var(--fg),0.2)", fontSize: 12, fontWeight: 500 }}>
                             No commits yet. Create your first checkpoint above.
                         </p>
                     </div>
@@ -157,10 +157,10 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                                     borderRadius: 12, overflow: "hidden",
                                     border: isFirst
                                         ? "1px solid rgba(20,184,166,0.3)"
-                                        : "1px solid rgba(255,255,255,0.06)",
+                                        : "1px solid rgba(var(--fg),0.06)",
                                     background: isFirst
                                         ? "rgba(20,184,166,0.06)"
-                                        : "rgba(255,255,255,0.02)",
+                                        : "rgba(var(--fg),0.02)",
                                 }}>
                                     <button
                                         onClick={() => setExpandedCommit(isExpanded ? null : commit._id)}
@@ -173,8 +173,8 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                                         {/* Version badge */}
                                         <span style={{
                                             fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 6,
-                                            background: isFirst ? "rgba(20,184,166,0.2)" : "rgba(255,255,255,0.06)",
-                                            color: isFirst ? "#5eead4" : "rgba(255,255,255,0.4)",
+                                            background: isFirst ? "rgba(20,184,166,0.2)" : "rgba(var(--fg),0.06)",
+                                            color: isFirst ? "var(--text-accent)" : "rgba(var(--fg),0.4)",
                                             flexShrink: 0,
                                         }}>
                                             v{commit.version}
@@ -187,15 +187,15 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                                                 {commit.message}
                                             </p>
                                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                                                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", display: "flex", alignItems: "center", gap: 3 }}>
+                                                <span style={{ fontSize: 10, color: "rgba(var(--fg),0.3)", display: "flex", alignItems: "center", gap: 3 }}>
                                                     <User2 size={9} /> {commit.committedByName}
                                                 </span>
-                                                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", gap: 3 }}>
+                                                <span style={{ fontSize: 10, color: "rgba(var(--fg),0.2)", display: "flex", alignItems: "center", gap: 3 }}>
                                                     <Clock size={9} /> {formatDate(commit.createdAt)}
                                                 </span>
                                             </div>
                                         </div>
-                                        <div style={{ color: "rgba(255,255,255,0.2)" }}>
+                                        <div style={{ color: "rgba(var(--fg),0.2)" }}>
                                             {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                                         </div>
                                     </button>
@@ -203,10 +203,10 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                                     {isExpanded && (
                                         <div style={{
                                             padding: "8px 12px 12px",
-                                            borderTop: "1px solid rgba(255,255,255,0.04)",
+                                            borderTop: "1px solid rgba(var(--fg),0.04)",
                                             background: "rgba(0,0,0,0.15)",
                                         }}>
-                                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
+                                            <p style={{ fontSize: 11, color: "rgba(var(--fg),0.3)", marginBottom: 8 }}>
                                                 {commit.snapshot?.sections?.length || 0} section(s) in this snapshot
                                             </p>
                                             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
@@ -214,9 +214,9 @@ export default function VersionPanel({ websiteId, pageId, open, onClose }) {
                                                     <span key={j} style={{
                                                         fontSize: 9, fontWeight: 700, padding: "2px 6px",
                                                         borderRadius: 5, textTransform: "uppercase",
-                                                        background: "rgba(255,255,255,0.05)",
-                                                        color: "rgba(255,255,255,0.4)",
-                                                        border: "1px solid rgba(255,255,255,0.06)",
+                                                        background: "rgba(var(--fg),0.05)",
+                                                        color: "rgba(var(--fg),0.4)",
+                                                        border: "1px solid rgba(var(--fg),0.06)",
                                                     }}>
                                                         {s.type}
                                                     </span>

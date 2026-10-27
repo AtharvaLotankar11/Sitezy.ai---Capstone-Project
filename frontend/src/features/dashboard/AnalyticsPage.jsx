@@ -1,25 +1,25 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { 
-    ArrowLeft, Activity, Users, FileText, 
-    TrendingUp, Sparkles, AlertCircle, Loader2, BarChart2
+import {
+    ArrowLeft, Activity, Users, FileText,
+    TrendingUp, Sparkles, AlertCircle, Loader2, BarChart2, Inbox
 } from "lucide-react";
 import api from "../../services/api.js";
 import DashboardLayout from "../../layouts/DashboardLayout.jsx";
+import FormSubmissionsModal from "../../components/FormSubmissionsModal.jsx";
 
 export default function AnalyticsPage() {
     const { websiteId } = useParams();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [analytics, setAnalytics] = useState(null);
+    const [showSubs, setShowSubs] = useState(false);
 
     useEffect(() => {
         const fetchAnalytics = async () => {
             try {
                 setLoading(true);
-                setError(null);
                 const { data } = await api.get(`/analytics/website/${websiteId}`);
-                console.log("Analytics response:", data);
                 if (data.success) {
                     setAnalytics(data.data);
                 } else {
@@ -27,11 +27,7 @@ export default function AnalyticsPage() {
                 }
             } catch (err) {
                 console.error("Analytics fetch error:", err);
-                if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
-                    setError("Analysis is taking longer than expected. The AI is processing a large amount of data. Please try again in a moment.");
-                } else {
-                    setError(err.response?.data?.message || "Failed to connect to server");
-                }
+                setError(err.response?.data?.message || "Failed to connect to server");
             } finally {
                 setLoading(false);
             }
@@ -42,11 +38,12 @@ export default function AnalyticsPage() {
 
     return (
         <DashboardLayout>
-            <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <style>{`@media (max-width: 720px){ .an-pad{ padding: 24px 18px 48px !important; } .an-pad h1{ font-size: 26px !important; } }`}</style>
+            <div className="an-pad" style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 40px 60px" }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
                     <Link to="/websites" style={{
-                        padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.05)",
+                        padding: 10, borderRadius: 12, background: "rgba(var(--fg),0.05)",
                         color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center"
                     }}>
                         <ArrowLeft size={20} />
@@ -58,7 +55,7 @@ export default function AnalyticsPage() {
                             </h1>
                             <span style={{
                                 padding: "4px 10px", borderRadius: 100, background: "rgba(20,184,166,0.15)",
-                                color: "#5eead4", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, border: "1px solid rgba(20,184,166,0.28)"
+                                color: "var(--text-accent)", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, border: "1px solid rgba(20,184,166,0.28)"
                             }}>
                                 <Sparkles size={12} /> AI Powered
                             </span>
@@ -72,7 +69,7 @@ export default function AnalyticsPage() {
                 {loading ? (
                     <div style={{ minHeight: 400, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
                         <Loader2 size={32} className="animate-spin" style={{ color: "var(--color-primary)" }} />
-                        <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>Analyzing data with Qwen...</p>
+                        <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>Analyzing data with AI...</p>
                     </div>
                 ) : error ? (
                     <div style={{ padding: 32, background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: 24, display: "flex", alignItems: "center", gap: 16, color: "#f87171" }}>
@@ -120,13 +117,24 @@ export default function AnalyticsPage() {
                             </div>
                         </div>
 
+                        {/* Owner-only: view every raw form submission (lead data) */}
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+                            <button onClick={() => setShowSubs(true)} style={{
+                                display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px", borderRadius: 100,
+                                background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-primary)",
+                                fontSize: 14, fontWeight: 600, fontFamily: "var(--font-display)", cursor: "pointer",
+                            }}>
+                                <Inbox size={16} /> View all submissions
+                            </button>
+                        </div>
+
                         {/* AI Insights Section */}
                         <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: 32, padding: 40, position: "relative", overflow: "hidden" }}>
                             <div style={{ position: "absolute", top: 0, right: 0, width: "100%", height: "100%", background: "radial-gradient(circle at top right, rgba(20,184,166,0.1), transparent 50%)", pointerEvents: "none" }} />
 
                             <div style={{ position: "relative", zIndex: 1 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-                                    <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(20,184,166,0.15)", color: "#5eead4", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(20,184,166,0.15)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         <TrendingUp size={24} />
                                     </div>
                                     <div>
@@ -141,7 +149,7 @@ export default function AnalyticsPage() {
 
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24 }}>
                                     {analytics.insights && analytics.insights.map((insight, idx) => (
-                                        <div key={idx} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 20, padding: 24 }}>
+                                        <div key={idx} style={{ background: "rgba(var(--fg),0.03)", border: "1px solid rgba(var(--fg),0.06)", borderRadius: 20, padding: 24 }}>
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
                                                 <h4 style={{ fontSize: 14, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>{insight.label}</h4>
                                                 <BarChart2 size={18} style={{ color: "var(--color-primary)", opacity: 0.7 }} />
@@ -156,6 +164,15 @@ export default function AnalyticsPage() {
                     </>
                 )}
             </div>
+
+            {/* All form submissions (owner/admin) */}
+            {showSubs && (
+                <FormSubmissionsModal
+                    websiteId={websiteId}
+                    title={`${analytics?.businessName || "Project"} — Submissions`}
+                    onClose={() => setShowSubs(false)}
+                />
+            )}
         </DashboardLayout>
     );
 }

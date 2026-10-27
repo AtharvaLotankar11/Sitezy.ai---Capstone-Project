@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Ollama } from "ollama";
+import ollama, { Ollama } from "ollama";
 import Joi from "joi";
 import AIUsageLog from "./aiUsageLog.model.js";
 import Page from "../builder/page.model.js";
@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from "uuid";
 import FirebaseAgent from "../../agents/firebaseAgent.js";
 import { aiUsageTotal } from "../../utils/metrics.js";
 import { searchUnsplash, searchUnsplashBatch } from "../../services/unsplash.service.js";
+import { redactText } from "../../utils/redact.js";
+import { repairForms } from "./formRepair.js";
 import axios from "axios";
 
 
@@ -527,7 +529,68 @@ const inputSchema = Joi.object({
     features: Joi.array().items(Joi.string()).min(1).required(),
     websiteId: Joi.string().allow("").optional(),
     preferredModel: Joi.string().valid("qwen", "gemini").optional(),
+    // Confirmed facts collected by the Prompt Tuner. Always optional — generation
+    // behaves exactly as before when it is absent.
+    brandDetails: Joi.object().unknown(true).optional(),
 }).unknown(true);
+
+// ─── Brand facts (Prompt Tuner answers → prompt block) ────────────────────────
+// How each confirmed fact must be used, spelled out for the model. Keys match
+// TUNE_FIELDS in the tuner below.
+const BRAND_FACT_USAGE = {
+    tagline: "Use this VERBATIM as the Hero heading (or as the Hero subheading if it is longer than 8 words). Do not reword it.",
+    positioning: "This is the brand's positioning. Every page's copy must reflect this angle.",
+    usp: "Lead the About/Text section with this differentiator and reference it in the CTA.",
+    services: "These are the ONLY services/products to advertise. Use them for Gallery items, service lists and DynamicForm select options. Do not invent extra ones.",
+    reviews: "REAL customer reviews. Render them as a Gallery section (e.g. heading \"What our customers say\") where each item's 'title' is the reviewer's name and 'description' is their quote, copied word for word. Never write additional reviews of your own.",
+    address: "The REAL business address. Print it EXACTLY as given in the Footer and on the Contact page. Never substitute a different street, city or country anywhere on the site.",
+    hours: "The REAL opening hours. Print them exactly as given in the Footer and on the Contact page.",
+    cta: "Use this as the primary ctaText on the Hero and CTA sections.",
+};
+
+const BRAND_FACT_LABELS = {
+    tagline: "Tagline", positioning: "Positioning / strategy", usp: "Unique selling point",
+    services: "Services offered", reviews: "Customer reviews", address: "Business address",
+    hours: "Opening hours", cta: "Primary call to action",
+};
+
+/** Render one answer (string, or array from a multi-select) as prompt text. */
+const formatBrandFactValue = (value) => {
+    if (Array.isArray(value)) {
+        return value
+            .map((v) => (typeof v === "string" ? v.trim() : JSON.stringify(v)))
+            .filter(Boolean)
+            .join(" | ");
+    }
+    return typeof value === "string" ? value.trim() : "";
+};
+
+/**
+ * Build the CONFIRMED BRAND FACTS prompt block from tuner answers. Only keys the
+ * user actually answered are included; returns "" when nothing was tuned.
+ */
+const formatBrandFacts = (brandDetails) => {
+    if (!brandDetails || typeof brandDetails !== "object") return "";
+
+    const lines = Object.keys(BRAND_FACT_USAGE)
+        .map((key) => {
+            const val = formatBrandFactValue(brandDetails[key]);
+            if (!val) return null;
+            return `- ${BRAND_FACT_LABELS[key]}: ${val}\n  → ${BRAND_FACT_USAGE[key]}`;
+        })
+        .filter(Boolean);
+
+    if (lines.length === 0) return "";
+
+    return `
+CONFIRMED BRAND FACTS (PROVIDED BY THE BUSINESS OWNER — HIGHEST PRIORITY):
+These are verified facts about the real business. Use them EXACTLY as written and build the
+copy around them. NEVER invent an alternative to a fact given here, never contradict one, and
+never replace one with a placeholder. Anything not listed here you may still write yourself.
+
+${lines.join("\n")}
+`;
+};
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -558,7 +621,8 @@ export const generateLayout = async (req, res) => {
         secondaryColor,
         theme,
         baseTemplateSections,
-        preferredModel
+        preferredModel,
+        brandDetails
     } = value;
 
 
@@ -571,7 +635,7 @@ export const generateLayout = async (req, res) => {
     try {
 
         const mlResponse = await axios.post(
-            "http://127.0.0.1:5050/generate-layout",
+            "http://localhost:5050/generate-layout",
             {
                 businessType,
                 tone,
@@ -644,15 +708,33 @@ export const generateLayout = async (req, res) => {
 
         product_grid: "Gallery",
 
-        booking_section: "ContactForm"
+        booking_section: "ContactForm",
+
+        // Blocks without a dedicated builder section map to the closest one; the block
+        // name travels with it as a content hint (previously these were silently dropped).
+        service_cards: "Gallery",
+        pricing_table: "Gallery",
+        team_section: "Gallery",
+        faq: "Text",
+        stats_counter: "Text",
+        blog_preview: "Text",
+        newsletter: "CTA"
     };
 
 
-    // Convert ML output → builder section list
+    // Convert ML output → builder section list; approximate mappings keep the block
+    // name as a hint, e.g. "Gallery (pricing table)"
 
+    const approximate = new Set(["testimonials", "product_grid", "booking_section", "service_cards",
+        "pricing_table", "team_section", "faq", "stats_counter", "blog_preview", "newsletter"]);
     const mlFeatures = recommendedSections
-        .map(section => sectionMapping[section])
-        .filter(Boolean);
+        .filter(section => sectionMapping[section])
+        .map(section => approximate.has(section)
+            ? `${sectionMapping[section]} (${section.replace(/_/g, " ")})`
+            : sectionMapping[section]);
+    // The prompt requires an order form on every home page; the recommender's vocabulary
+    // has no such block, so request it explicitly (otherwise a contact form replaces it).
+    if (mlFeatures.length > 0 && !mlFeatures.includes("DynamicForm")) mlFeatures.push("DynamicForm");
 
 
     // ==========================================
@@ -684,6 +766,9 @@ export const generateLayout = async (req, res) => {
     // Build context-aware image keywords for the prompt
     const contextImages = getContextQueries(businessType).slice(0, 5).join(" | ");
 
+    // Facts confirmed through the Prompt Tuner — empty string when the user skipped it
+    const brandFactsBlock = formatBrandFacts(brandDetails);
+
     const prompt = `
 You are a world-class UI/UX designer and website architect. Your task is to generate a stunning, production-ready website layout in valid JSON. The output quality should match premium agencies like Webflow and Framer.
 
@@ -702,7 +787,7 @@ IMPORTANT - Base Template Override:
 Base Template:
 ${JSON.stringify(baseTemplateSections)}
 ` : ""}
-
+${brandFactsBlock}
 CRITICAL DESIGN RULES:
 1. Create visually stunning layouts with strong hierarchy
 2. Alternate section backgrounds for visual rhythm (white → light gray → white → etc.)
@@ -816,6 +901,8 @@ MANDATORY PAGE RULES:
 - Every page MUST start with Navbar and end with Footer
 - Generate exactly 3 pages: Home, About, Contact
 - Home page MUST include: Navbar, Hero, Text, Gallery, CTA, DynamicForm, Footer
+${brandDetails?.reviews ? `- The Home page MUST ALSO include a SECOND Gallery section holding the confirmed customer reviews (title = reviewer name, description = their exact quote, imageQuery = a portrait photo term such as "smiling customer portrait cafe"). Use ONLY the reviews provided above — do not add any of your own.` : ""}
+${brandFactsBlock ? `- Re-read the CONFIRMED BRAND FACTS above before writing each section, and reproduce every fact exactly.` : ""}
 - About page: Navbar, Hero or Text, Text, Gallery (team/values), Footer
 - Contact page: Navbar, ContactForm, Footer
 
@@ -829,7 +916,7 @@ COLOR RULES:
     let aiResponse = null;
     let success = true;
     let errorMessage = null;
-    let usedModel = preferredModel === "gemini" ? "gemini-3-flash-preview" : "qwen2.5:1.5b (Ollama)";
+    let usedModel = preferredModel === "gemini" ? "gemini-3-flash-preview" : "qwen:4b (Ollama)";
 
     try {
         let text = "";
@@ -840,9 +927,9 @@ COLOR RULES:
             console.log("🔵 [AI] Successfully used Pro AI for content generation.");
         } else {
             try {
-                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen2.5)...");
+                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen3.5)...");
                 const r = await ollamaClient.chat({
-                    model: 'qwen2.5:1.5b',
+                    model: 'qwen3.5:4b',
                     think: false,
                     messages: [
                         { role: 'system', content: 'You are an expert AI website generator and elite copywriter. You MUST generate unique, engaging content perfectly tailored to the requested business type. NEVER blindly copy placeholder text from templates.' },
@@ -899,11 +986,32 @@ COLOR RULES:
             aiResponse = await postProcessAIOutput(validated, businessType);
         }
 
+        // The layout schema checks structure, not content: validate every form and
+        // regenerate only empty ones with a short local call (deterministic default on failure).
+        const formStats = await repairForms(aiResponse, { businessType, tone, targetAudience }, async (formPrompt) => {
+            const r = await ollamaClient.chat({
+                model: "qwen3.5:4b", think: false, format: "json",
+                messages: [{ role: "user", content: formPrompt }],
+                options: { num_predict: 900, num_ctx: 4096, temperature: 0.3 },
+            });
+            return r.message?.content || "";
+        });
+        if (formStats.regenerated || formStats.defaulted || formStats.contactDefaulted) {
+            console.log("📝 [AI] Form repair:", formStats);
+        }
+
         // If websiteId provided, save pages to DB
         if (website) {
             const autoPublish = req.query.autoPublish === "true" || req.body.autoPublish === true;
 
-            for (const pageData of aiResponse.pages) {
+            // Map the first generated page onto the project's existing homepage (instead of
+            // creating a second "Home"), so a full generation never leaves a stale placeholder.
+            const existingHome = await Page.findOne({ websiteId: website._id, tenantId: req.tenantId, isHomePage: true });
+            const savedPages = [];
+            let homeHandled = false;
+
+            for (let i = 0; i < aiResponse.pages.length; i++) {
+                const pageData = aiResponse.pages[i];
                 const sectionsWithIds = pageData.sections.map((s, idx) => ({
                     id: uuidv4(),
                     type: s.type,
@@ -914,30 +1022,57 @@ COLOR RULES:
                     },
                     order: idx,
                 }));
+                const slug = pageData.slug.toLowerCase();
+                const isHome = i === 0 || slug === "home";
 
-                const existing = await Page.findOne({
-                    websiteId: website._id,
-                    slug: pageData.slug.toLowerCase(),
-                    tenantId: req.tenantId,
-                });
+                if (isHome && existingHome && !homeHandled) {
+                    existingHome.title = pageData.title;
+                    existingHome.layoutConfig = { sections: sectionsWithIds };
+                    existingHome.status = autoPublish ? "published" : "draft";
+                    existingHome.markModified("layoutConfig");
+                    await existingHome.save();
+                    homeHandled = true;
+                    savedPages.push(existingHome);
+                    continue;
+                }
 
+                const existing = await Page.findOne({ websiteId: website._id, slug, tenantId: req.tenantId });
                 if (existing) {
-                    existing.layoutConfig.sections = sectionsWithIds;
+                    existing.layoutConfig = { sections: sectionsWithIds };
                     existing.title = pageData.title;
                     existing.status = autoPublish ? "published" : "draft";
+                    existing.markModified("layoutConfig");
                     await existing.save();
+                    savedPages.push(existing);
                 } else {
-                    await Page.create({
+                    const created = await Page.create({
                         tenantId: req.tenantId,
                         websiteId: website._id,
                         title: pageData.title,
-                        slug: pageData.slug.toLowerCase(),
-                        isHomePage: pageData.slug.toLowerCase() === "home",
+                        slug,
+                        isHomePage: isHome && !existingHome && !homeHandled,
                         layoutConfig: { sections: sectionsWithIds },
                         status: autoPublish ? "published" : "draft",
                         createdBy: req.user._id,
                     });
+                    if (created.isHomePage) homeHandled = true;
+                    savedPages.push(created);
                 }
+            }
+
+            // Exactly one homepage, and wire every page's navbar to the real pages so
+            // navigation is interconnected out of the box.
+            const homeId = (savedPages.find((p) => p.isHomePage) || savedPages[0])?._id?.toString();
+            const navLinks = savedPages
+                .slice().sort((a, b) => (b.isHomePage ? 1 : 0) - (a.isHomePage ? 1 : 0))
+                .map((p) => ({ label: p.title, url: p.isHomePage ? "/" : `/${p.slug}` }));
+            for (const p of savedPages) {
+                const shouldBeHome = p._id?.toString() === homeId;
+                if (p.isHomePage !== shouldBeHome) p.isHomePage = shouldBeHome;
+                const nav = (p.layoutConfig?.sections || []).find((s) => s.type === "Navbar");
+                if (nav) { nav.props = nav.props || {}; nav.props.links = navLinks; }
+                p.markModified("layoutConfig");
+                await p.save();
             }
 
             // Auto-publish website if requested
@@ -1020,7 +1155,7 @@ COLOR RULES:
         // Use fallback layout on complete failure
         if (!aiResponse) {
             console.log("🔄 [AI] Using fallback layout due to error");
-            aiResponse = await postProcessAIOutput(buildFallbackLayout(businessType, tone, targetAudience), businessType);
+            aiResponse = postProcessAIOutput(buildFallbackLayout(businessType, tone, targetAudience), businessType);
             success = true; // Return fallback as success
             errorMessage = null;
         }
@@ -1031,7 +1166,7 @@ COLOR RULES:
         tenantId: req.tenantId,
         userId: req.user._id,
         websiteId: websiteId || null,
-        prompt: { businessType, tone, targetAudience, features },
+        prompt: { businessType, tone, targetAudience, features, brandDetails: brandDetails || null },
         response: aiResponse,
         model: usedModel,
         success,
@@ -1108,10 +1243,10 @@ Return ONLY a JSON object (no prose, no markdown fences) with EXACTLY these keys
 Guidance: choose colors that truly match the concept's industry & mood (spa→soft rose, fintech→deep blue, eco→green, luxury dining→gold/espresso, kids→bright playful). Choose theme by vibe (sleek/premium/nightlife→Dark; clean/airy/editorial→Light).`;
 
         let text = "";
-        let usedModel = "qwen2.5:1.5b (Ollama)";
+        let usedModel = "qwen3.5:4b (Ollama)";
         try {
             const r = await ollamaClient.chat({
-                model: 'qwen2.5:1.5b',
+                model: 'qwen3.5:4b',
                 think: false,
                 messages: [
                     { role: 'system', content: 'You are a precise design configuration engine. You output only strict, valid JSON.' },
@@ -1160,6 +1295,218 @@ Guidance: choose colors that truly match the concept's industry & mood (spa→so
     }
 };
 
+// ─── Prompt Tuner ─────────────────────────────────────────────────────────────
+// Before generating, the tuner asks a handful of business-specific questions so the
+// site is built from facts the owner confirmed instead of invented filler.
+
+// Answers map onto these keys and nothing else, so generateLayout can rely on the shape.
+const TUNE_FIELDS = ["tagline", "positioning", "usp", "services", "reviews", "address", "hours", "cta"];
+const TUNE_TYPES = ["single", "multi", "text"];
+
+// Facts no model can guess — they exist only if the owner types them. Any question
+// the LLM returns for these is forced to free text so we never offer invented options.
+const TUNE_TEXT_ONLY_FIELDS = new Set(["address", "hours", "reviews"]);
+
+const TUNE_FIELD_LABELS = {
+    tagline: "Which tagline fits your brand best?",
+    positioning: "How should the site position your business?",
+    usp: "What makes you different from the competition?",
+    services: "Which services should the website feature?",
+    reviews: "Paste any real customer reviews you'd like on the site",
+    address: "What is your real business address?",
+    hours: "What are your opening hours?",
+    cta: "What should the main button ask visitors to do?",
+};
+
+const TUNE_PLACEHOLDERS = {
+    reviews: 'One review per line, e.g. "Best flat white in town." — Aditi S.',
+    address: "e.g. 12 Kalyani Nagar, Pune, Maharashtra 411006",
+    hours: "e.g. Mon-Sat 7am-9pm, Sunday 8am-5pm",
+};
+
+/** Minimal question set used when the LLM is unreachable or returns junk. */
+const buildFallbackTuneQuestions = () => ([
+    {
+        id: "tagline", field: "tagline", label: TUNE_FIELD_LABELS.tagline, type: "text",
+        options: [], allowCustom: true, placeholder: "e.g. Crafted fresh, every single morning",
+    },
+    {
+        id: "positioning", field: "positioning",
+        label: "Describe your business in one line — what you do and who for",
+        type: "text", options: [], allowCustom: true,
+        placeholder: "e.g. A neighbourhood cafe for remote workers who care about single-origin coffee",
+    },
+    {
+        id: "address", field: "address", label: TUNE_FIELD_LABELS.address, type: "text",
+        options: [], allowCustom: true, placeholder: TUNE_PLACEHOLDERS.address,
+    },
+]);
+
+/**
+ * Whitelist / coerce whatever the model returned into questions the UI can render.
+ * Anything malformed is dropped rather than patched, so a bad generation degrades to
+ * fewer questions instead of broken ones.
+ */
+const normalizeTuneQuestions = (raw) => {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+
+    for (const q of raw) {
+        if (!q || typeof q !== "object") continue;
+
+        const field = String(q.field || q.id || "").trim().toLowerCase();
+        if (!TUNE_FIELDS.includes(field) || seen.has(field)) continue;
+
+        let options = Array.isArray(q.options)
+            ? [...new Set(
+                q.options
+                    .filter((o) => typeof o === "string")
+                    .map((o) => o.trim().slice(0, 200))
+                    .filter(Boolean)
+            )].slice(0, 6)
+            : [];
+
+        let type = TUNE_TYPES.includes(q.type) ? q.type : "single";
+        if (TUNE_TEXT_ONLY_FIELDS.has(field)) type = "text";
+        // A one-option choice is not a choice — let the owner just write it.
+        if (type !== "text" && options.length < 2) type = "text";
+        if (type === "text") options = [];
+
+        const label = (typeof q.label === "string" && q.label.trim())
+            ? q.label.trim().slice(0, 160)
+            : TUNE_FIELD_LABELS[field];
+
+        out.push({
+            id: field,
+            field,
+            label,
+            type,
+            options,
+            allowCustom: true, // the owner can always overrule the AI's suggestions
+            placeholder: (typeof q.placeholder === "string" && q.placeholder.trim())
+                ? q.placeholder.trim().slice(0, 140)
+                : (TUNE_PLACEHOLDERS[field] || ""),
+        });
+        seen.add(field);
+        if (out.length >= 6) break;
+    }
+
+    // The whole point is to stop the model inventing a location, so always ask for one.
+    if (!seen.has("address")) {
+        if (out.length >= 6) out.pop();
+        out.push({
+            id: "address", field: "address", label: TUNE_FIELD_LABELS.address, type: "text",
+            options: [], allowCustom: true, placeholder: TUNE_PLACEHOLDERS.address,
+        });
+    }
+
+    return out;
+};
+
+/**
+ * POST /api/ai/tune-questions
+ * Turns a vague one-line concept into 4-6 high-value, business-specific questions with
+ * AI-generated answer options. Qwen (Ollama) first, Gemini fallback, hardcoded set last.
+ */
+export const generateTuneQuestions = async (req, res) => {
+    try {
+        const concept = (req.body.concept || "").trim();
+        if (!concept) return res.status(400).json({ success: false, message: "Concept is required." });
+
+        const tone = (req.body.tone || "").trim();
+        const audience = (req.body.audience || "").trim();
+        const businessType = (req.body.businessType || "").trim();
+
+        const prompt = `You are a brand strategist onboarding a new client. They described their business in one line and you must write their website. Ask only the FEW questions whose answers you genuinely cannot invent — the answers become the real copy on their site.
+
+CLIENT'S CONCEPT:
+"""${concept}"""
+${businessType ? `Business category: ${businessType}\n` : ""}${tone ? `Desired tone: ${tone}\n` : ""}${audience ? `Target audience: ${audience}\n` : ""}
+Return ONLY a JSON object (no prose, no markdown fences), exactly:
+{ "questions": [ { "id": "...", "field": "...", "label": "...", "type": "single|multi|text", "options": ["..."], "allowCustom": true, "placeholder": "..." } ] }
+
+RULES:
+1. Return 4 to 6 questions. A few great questions beat many shallow ones. NEVER ask about colors, fonts, templates or layout — those are chosen elsewhere.
+2. "field" MUST be one of ${JSON.stringify(TUNE_FIELDS)}, each used at most once:
+   - tagline: the slogan shown in the hero
+   - positioning: the brand's strategy / angle in the market
+   - usp: the one thing that makes them different
+   - services: what they actually sell
+   - reviews: real customer testimonials
+   - address: their real street address
+   - hours: their real opening hours
+   - cta: what the main button should ask visitors to do
+3. "type" is "single" (pick one), "multi" (pick several) or "text" (they type it).
+   - ALWAYS use "text" with EMPTY options for address, hours and reviews. Those are real-world facts; offering invented options would put a fake address or a fake review on a real business.
+   - Use "single" or "multi" for tagline, positioning, usp, services and cta, each with 4-6 options.
+4. Options must be CONCRETE and written specifically for THIS business — real candidate taglines, real service names. Never generic filler like "Option A", "Quality", "Good service" or "Professional".
+5. "label" is the question as you would say it to the client, under 90 characters.
+6. "placeholder" is a short example answer, and only for "text" questions.
+
+WORKED EXAMPLE — for the concept "a cozy neighbourhood coffee shop in Pune":
+{ "questions": [
+  { "id": "tagline", "field": "tagline", "label": "Which tagline fits your cafe best?", "type": "single",
+    "options": ["Your daily grind, perfected", "Pune's cosiest corner for coffee", "Slow mornings, strong brews", "Where the neighbourhood meets"], "allowCustom": true, "placeholder": "" },
+  { "id": "services", "field": "services", "label": "Which offerings should the site showcase?", "type": "multi",
+    "options": ["Single-origin pour overs", "Fresh-baked croissants", "All-day breakfast", "Cold brew on tap", "Latte art workshops", "Beans by the bag"], "allowCustom": true, "placeholder": "" },
+  { "id": "usp", "field": "usp", "label": "What makes your cafe different?", "type": "single",
+    "options": ["We roast our own beans in-house every week", "Laptop-friendly, with power at every table", "Everything baked fresh each morning on site", "Direct-trade beans from Chikmagalur farms"], "allowCustom": true, "placeholder": "" },
+  { "id": "address", "field": "address", "label": "What is your real cafe address?", "type": "text",
+    "options": [], "allowCustom": true, "placeholder": "e.g. 12 Kalyani Nagar, Pune, Maharashtra 411006" },
+  { "id": "reviews", "field": "reviews", "label": "Paste any real customer reviews to feature", "type": "text",
+    "options": [], "allowCustom": true, "placeholder": "One per line, e.g. Best flat white in Pune. - Aditi S." }
+] }
+
+Now do the same for the client's concept above. Every option must be unmistakably about THEIR business.`;
+
+        let text = "";
+        let usedModel = "qwen3.5:4b (Ollama)";
+        try {
+            const r = await ollamaClient.chat({
+                model: 'qwen3.5:4b',
+                think: false,
+                messages: [
+                    { role: 'system', content: 'You are a precise brand-onboarding engine. You output only strict, valid JSON.' },
+                    { role: 'user', content: prompt }
+                ],
+                format: 'json',
+                options: { num_predict: 1400, num_ctx: 8192, temperature: 0.6 }
+            });
+            text = r.message.content || "";
+        } catch (ollamaErr) {
+            console.warn("⚠️ [AI Tuner] Ollama failed, falling back to Gemini:", ollamaErr.message);
+            usedModel = "gemini-3-flash-preview";
+            const result = await model.generateContent(prompt);
+            text = result.response.text();
+        }
+
+        // Extract JSON (handle markdown fences / surrounding prose)
+        let jsonStr = text;
+        const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fence) jsonStr = fence[1];
+        else { const obj = text.match(/\{[\s\S]*\}/); if (obj) jsonStr = obj[0]; }
+
+        let parsed = {};
+        try { parsed = JSON.parse(jsonStr.trim()); } catch { parsed = {}; }
+
+        // The model occasionally returns a bare array instead of { questions: [...] }
+        let questions = normalizeTuneQuestions(Array.isArray(parsed) ? parsed : parsed?.questions);
+
+        if (questions.length < 2) {
+            console.warn("⚠️ [AI Tuner] Unusable question set — serving fallback.");
+            questions = buildFallbackTuneQuestions();
+            usedModel = `${usedModel} (fallback)`;
+        }
+
+        return res.json({ success: true, questions, model: usedModel });
+    } catch (err) {
+        console.error("❌ [AI Tuner] error:", err);
+        // Never block the user: a working question set matters more than surfacing the error.
+        return res.json({ success: true, questions: buildFallbackTuneQuestions(), model: "fallback" });
+    }
+};
+
 /**
  * POST /api/public/ai/chat
  */
@@ -1170,7 +1517,8 @@ export const chatWithWebsite = async (req, res) => {
             return res.status(400).json({ success: false, message: "Missing question or websiteId" });
         }
 
-        const pages = await Page.find({ websiteId }).lean();
+        // Public endpoint: answer only from published pages, never from drafts.
+        const pages = await Page.find({ websiteId, status: "published" }).lean();
         if (!pages || pages.length === 0) {
             return res.status(404).json({ success: false, message: "Website not found or has no content" });
         }
@@ -1211,9 +1559,9 @@ ${siteContext}
 `;
 
         try {
-            console.log("🤖 [AI Chat] Attempting answer with qwen2.5:1.5b...");
+            console.log("🤖 [AI Chat] Attempting answer with qwen3.5:4b...");
             const r = await ollamaClient.chat({
-                model: 'qwen2.5:1.5b',
+                model: 'qwen3.5:4b',
                 think: false,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -1226,11 +1574,12 @@ ${siteContext}
                 }
             });
             const answer = r.message.content || '';
-            console.log("🟢 [AI Chat] Answer generated via qwen2.5:1.5b.");
+            console.log("🟢 [AI Chat] Answer generated via qwen:4b.");
             return res.json({ success: true, answer });
         } catch (ollamaErr) {
             console.warn("⚠️ [AI Chat] Ollama failure, falling back to Gemini...");
-            const result = await model.generateContent(systemPrompt + "\\n\\nUser Question: " + question);
+            // Visitor input leaves the host here, so strip contact identifiers first.
+            const result = await model.generateContent(systemPrompt + "\\n\\nUser Question: " + redactText(question));
             const answer = result.response.text();
             console.log("🔵 [AI Chat] Answer generated via Gemini.");
             return res.json({ success: true, answer });
@@ -1239,5 +1588,53 @@ ${siteContext}
     } catch (err) {
         console.error("❌ [AI Chat] generate response error:", err);
         res.status(500).json({ success: false, message: "Failed to process chat" });
+    }
+};
+
+/**
+ * POST /api/ai/help
+ * In-app AI help assistant — answers "how do I…" / "what is…" questions about using
+ * Sitezy, with short, friendly, step-by-step guidance. Qwen first, Gemini fallback.
+ */
+const HELP_KNOWLEDGE = `You are the in-app help assistant for Sitezy, an AI website builder. Answer the user's question with SHORT, friendly, step-by-step guidance (use numbered steps when explaining how to do something). Keep it concise. Only discuss Sitezy. Never mention the underlying AI model names.
+
+HOW TO BUILD A SITE (follow these EXACTLY — do not invent extra steps):
+- From scratch: 1) On the Dashboard or Projects page, click "Create Project". 2) Enter a name (and optional description), then click "Create Project". IMPORTANT: this only asks for a name/description — it does NOT ask for a template, tone, audience, colors, or blocks. 3) Your new project appears on the Projects page — click "Edit" on its card to open the Builder and start editing. 4) In the Builder, use "Add Section" to add blocks (Hero, Gallery, etc.) and click any section to edit it. 5) Click Save, then Publish to go live. (Tip: to fill it with AI-written content, open the AI Playground and set "Apply to" your project.)
+- With AI (AI Playground): 1) Open "AI Playground" (from the Projects page header or the Dashboard). 2) Describe your website concept. 3) Optionally click "AI auto configure" to let AI choose everything. 4) Pick a base template and set Tone, Audience, Theme Mode and Website Purpose, plus colors and Required Blocks. 5) Set "Apply to" to a project (or leave it on Preview), then click "Generate with Basic AI" or "Generate with Pro AI". 6) Open the project in the Builder to fine-tune, then Publish.
+
+PLATFORM MAP:
+- Dashboard: overview. "Create Project" makes a new blank project (asks for a name + description only). "AI Playground" generates a full site with AI. "At a Glance" shows website + deploy counts. Quick Links → Custom Domains & Team Settings. Recent Deployments and Activity Log open full history pages.
+- Projects page: each project card has Edit (open builder), Update/Deploy (publish), the rename/details pencil, Form Submissions (inbox), Analytics (bar chart), Delete, and an "Export" button (downloads the working code as a zip). AI Playground & Settings buttons are on this page header.
+- AI Playground: 1) Describe your concept. 2) Optionally click "AI auto configure" to let AI pick everything. 3) Pick a base template (the starting design). 4) Set Tone, Audience, Theme Mode, Website Purpose. 5) Pick Primary/Secondary colors. 6) "Apply to" = save into a project or just preview. 7) Choose Required Blocks (sections to include). 8) Generate with Basic AI (fast) or Pro AI (higher quality, more relevant images).
+   - TONE = the writing voice (Professional, Friendly, Bold, etc.). AUDIENCE = who the site is for. THEME MODE = Light or Dark look. WEBSITE PURPOSE = the main goal (sell, build brand, book, etc.). REQUIRED BLOCKS = which sections the page must include (Hero, Gallery, Pricing, Contact Form, etc.).
+- Builder: Left column = Pages list (+ to add an AI-built page) and "Page Layers (Sections)". Click "Add Section" to add a block. Drag the handle to reorder sections. Click a section to open its editor on the right.
+   - SECTIONS: Navbar = the top bar with your brand + menu links. Hero = the big intro/banner at the top. Text = a paragraph/about block. Gallery = a grid of images/cards. CTA (Call To Action) = a band that nudges visitors to act (e.g. "Order now"). ContactForm/DynamicForm = a form to collect details (you can add fields: text, email, dropdown, radio, checkbox). Footer = the bottom bar. Button/Image/Spacer = small building blocks.
+   - EDIT AN IMAGE (e.g. in the Navbar or Hero): click that section in Page Layers → its editor opens on the right → find the "Background Image" / image field → paste an image URL or click Upload.
+   - SEO button (top toolbar): scores your page's SEO, predicts engagement, and scans design health; "Auto-Improve" rewrites copy and "Generate meta & schema" adds SEO metadata.
+   - History: every Save/Publish is a version snapshot you can roll back to.
+   - Save = saves your draft. Publish = takes the site live and lets you pick a domain.
+- Settings: Workspace Details, Team Members, Custom Domains (open / rename / remove your domains).`;
+
+export const helpAssistant = async (req, res) => {
+    try {
+        const question = (req.body.question || "").toString().slice(0, 500).trim();
+        if (!question) return res.status(400).json({ success: false, message: "Ask a question." });
+        const where = (req.body.context || "").toString();
+        const prompt = `${HELP_KNOWLEDGE}\n\nThe user is currently on the ${where || "app"}.\n\nUser question: ${question}`;
+        try {
+            const r = await ollamaClient.chat({
+                model: "qwen3.5:4b", think: false,
+                messages: [{ role: "system", content: "You are Sitezy's concise, friendly in-app help assistant." }, { role: "user", content: prompt }],
+                options: { num_predict: 450, num_ctx: 8192, temperature: 0.3 },
+            });
+            return res.json({ success: true, answer: r.message?.content || "" });
+        } catch (e) {
+            const cloudPrompt = `${HELP_KNOWLEDGE}\n\nThe user is currently on the ${where || "app"}.\n\nUser question: ${redactText(question)}`;
+            const result = await model.generateContent(cloudPrompt);
+            return res.json({ success: true, answer: result.response.text() });
+        }
+    } catch (err) {
+        console.error("❌ [AI Help] error:", err?.message);
+        return res.status(500).json({ success: false, message: "Help is unavailable right now." });
     }
 };

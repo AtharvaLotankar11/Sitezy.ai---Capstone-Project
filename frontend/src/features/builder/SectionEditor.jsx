@@ -100,7 +100,7 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
                         }
                     }}
                     title="Overwrite links with your currently created pages"
-                    style={{ background: "rgba(20,184,166,0.15)", border: "1px solid rgba(20,184,166,0.3)", borderRadius: "4px", color: "#5eead4", fontSize: "10px", padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}
+                    style={{ background: "rgba(20,184,166,0.15)", border: "1px solid rgba(20,184,166,0.3)", borderRadius: "4px", color: "var(--text-accent)", fontSize: "10px", padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}
                 >
                     Auto-Fill Pages
                 </button>
@@ -161,7 +161,7 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
                 };
 
                 return (
-                    <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, padding: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8 }}>
+                    <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, padding: 8, background: "rgba(var(--fg),0.02)", border: "1px solid rgba(var(--fg),0.05)", borderRadius: 8 }}>
                         <div style={{ display: "flex", gap: 4 }}>
                             <input value={title} onChange={e => updateItem('title', e.target.value)} style={{ ...inputStyle, marginTop: 0, flex: 1 }} placeholder="Title" />
                             <button onClick={() => handleRemoveArrayItem(key, i)} style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", cursor: "pointer", padding: "0 8px", fontSize: "14px", border: "none", borderRadius: 4 }}>×</button>
@@ -313,7 +313,7 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
                         width: 32, height: 32, borderRadius: 8, flexShrink: 0,
                         background: props[key] || defaultVal,
                         position: "relative", overflow: "hidden", cursor: "pointer",
-                        border: "1px solid rgba(255,255,255,0.15)",
+                        border: "1px solid rgba(var(--fg),0.15)",
                         boxShadow: `0 2px 8px ${hex}40`,
                     }}>
                         <input type="color" value={hex}
@@ -381,7 +381,7 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
         };
         const opts = variants[type] || ["Default", "Variant 2", "Variant 3"];
         return (
-            <div key="variant" style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div key="variant" style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(var(--fg),0.06)" }}>
                 <label style={{ ...labelStyle, color: "var(--color-primary)", marginTop: 0 }}>Choose Design Template</label>
                 <div style={{ position: "relative", marginTop: 8 }}>
                     <select
@@ -405,11 +405,11 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
         return (
             <div style={{
                 marginTop: 16, paddingTop: 14,
-                borderTop: "1px solid rgba(255,255,255,0.06)",
+                borderTop: "1px solid rgba(var(--fg),0.06)",
             }}>
                 <p style={{
                     fontSize: "10px", fontWeight: 800, textTransform: "uppercase",
-                    letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)",
+                    letterSpacing: "0.1em", color: "rgba(var(--fg),0.25)",
                     marginBottom: 6, display: "flex", alignItems: "center", gap: 6,
                 }}>
                     🎨 Style Controls
@@ -426,6 +426,49 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
                 {renderColorField("Accent Color", "accentColor", "#14b8a6")}
                 {renderColorField("Secondary Color", "secondaryColor", "#0ea5e9")}
                 {renderFontField()}
+            </div>
+        );
+    };
+
+    // Full field editor for DynamicForm — add/remove fields, pick a type, and (for
+    // dropdown / radio / checkbox) edit the list of options.
+    const FIELD_TYPES = ["text", "email", "tel", "number", "date", "textarea", "select", "radio", "checkbox"];
+    const fieldSlug = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field";
+    const renderDynamicFields = (label, key) => {
+        const fields = props[key] || (Array.isArray(props.fields) && typeof props.fields[0] === "object" ? props.fields : []);
+        const setFields = (next) => onChange({ [key]: next });
+        const updateField = (i, patch) => setFields(fields.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+        const hasOptions = (t) => ["select", "radio", "checkbox"].includes(t);
+        return (
+            <div key={key}>
+                <label style={labelStyle}>{label}</label>
+                {fields.map((f, i) => (
+                    <div key={i} style={{ marginTop: 8, padding: 8, background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                            <input value={f.label || ""} placeholder="Field label" onChange={(e) => updateField(i, { label: e.target.value, name: fieldSlug(e.target.value) })} style={{ ...inputStyle, marginTop: 0, flex: 1 }} />
+                            <button onClick={() => setFields(fields.filter((_, idx) => idx !== i))} style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "none", borderRadius: 6, cursor: "pointer", padding: "0 9px", fontSize: 14 }}>×</button>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <select value={f.type || "text"} onChange={(e) => updateField(i, { type: e.target.value })} style={{ ...inputStyle, marginTop: 0, flex: 1, cursor: "pointer" }}>
+                                {FIELD_TYPES.map((t) => <option key={t} value={t} style={{ background: "#1e293b", color: "#fff" }}>{t}</option>)}
+                            </select>
+                            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", cursor: "pointer" }}>
+                                <input type="checkbox" checked={f.required !== false} onChange={(e) => updateField(i, { required: e.target.checked })} /> Required
+                            </label>
+                        </div>
+                        {hasOptions(f.type) && (
+                            <textarea value={(f.options || []).join("\n")} placeholder="One option per line" rows={3}
+                                // Keep raw lines (incl. the blank line you're typing) so Enter works;
+                                // blank options are filtered out at render time.
+                                onChange={(e) => updateField(i, { options: e.target.value.split("\n") })}
+                                style={{ ...inputStyle, marginTop: 0, resize: "vertical" }} />
+                        )}
+                    </div>
+                ))}
+                <button onClick={() => setFields([...fields, { name: fieldSlug(`field ${fields.length + 1}`), label: `Field ${fields.length + 1}`, type: "text", required: true }])}
+                    style={{ marginTop: 8, fontSize: 12, color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    + Add field
+                </button>
             </div>
         );
     };
@@ -483,6 +526,7 @@ export default function SectionEditor({ section, onChange, pages = [] }) {
                 return <>
                     {renderField("Heading", "heading", "text", "Fill Details")}
                     {renderField("Description", "description", "textarea", "Please provide the following information.")}
+                    {renderDynamicFields("Form Fields", "dynamicFields")}
                     {renderField("Submit Button Text", "submitText", "text", "Submit")}
                     {renderImageField("Background Image", "backgroundImage")}
                 </>;

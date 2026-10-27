@@ -3,6 +3,7 @@ import {
     getDomains,
     addDomain,
     verifyDomain,
+    updateDomain,
     deleteDomain,
     resolveHostname,
     getPublicPage,
@@ -16,6 +17,7 @@ const router = express.Router();
 router.get("/", authChain, getDomains);
 router.post("/", authChain, requireRole("OWNER"), addDomain);
 router.post("/:id/verify", authChain, requireRole("OWNER"), verifyDomain);
+router.put("/:id", authChain, requireRole("OWNER"), updateDomain);
 router.delete("/:id", authChain, requireRole("OWNER"), deleteDomain);
 
 export default router;

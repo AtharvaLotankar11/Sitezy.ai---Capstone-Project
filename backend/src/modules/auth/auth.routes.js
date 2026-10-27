@@ -7,6 +7,7 @@ import {
     updateUserRole,
     removeUser,
     getMe,
+    updateMe,
 } from "./auth.controller.js";
 import { authChain, requireRole } from "../../middleware/auth.middleware.js";
 
@@ -18,6 +19,7 @@ router.post("/login", login);
 
 // Protected routes
 router.get("/me", authChain, getMe);
+router.put("/me", authChain, updateMe);
 router.post("/invite", authChain, requireRole("OWNER", "ADMIN"), inviteUser);
 router.get("/users", authChain, requireRole("OWNER", "ADMIN"), getTenantUsers);
 router.put("/users/:userId/role", authChain, requireRole("OWNER"), updateUserRole);

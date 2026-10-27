@@ -34,6 +34,15 @@ export const getMe = createAsyncThunk("auth/me", async (_, { rejectWithValue }) 
     }
 });
 
+export const updateProfile = createAsyncThunk("auth/updateProfile", async (data, { rejectWithValue }) => {
+    try {
+        const res = await api.put("/auth/me", data);
+        return res.data;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || "Update failed");
+    }
+});
+
 const authSlice = createSlice({
     name: "auth",
     initialState: {
@@ -85,6 +94,12 @@ const authSlice = createSlice({
                 state.tenant = action.payload.tenant;
                 localStorage.setItem("sp_user", JSON.stringify(action.payload.user));
                 localStorage.setItem("sp_tenant", JSON.stringify(action.payload.tenant));
+            })
+            .addCase(updateProfile.fulfilled, (state, action) => {
+                if (action.payload.user) {
+                    state.user = action.payload.user;
+                    localStorage.setItem("sp_user", JSON.stringify(action.payload.user));
+                }
             });
     },
 });

@@ -55,7 +55,7 @@ const PlanCard = ({ plan, currentPlan, onSelect, loading }) => {
                 transform: "translateY(0)",
             }}
             onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
+                if (!isActive) e.currentTarget.style.borderColor = "rgba(var(--fg),0.2)";
                 e.currentTarget.style.transform = "translateY(-4px)";
             }}
             onMouseLeave={(e) => {
@@ -405,12 +405,12 @@ const SubscriptionPage = () => {
                             marginBottom: 20,
                         }}
                     >
-                        <CreditCard size={16} style={{ color: "#5eead4" }} />
+                        <CreditCard size={16} style={{ color: "var(--text-accent)" }} />
                         <span
                             style={{
                                 fontSize: 13,
                                 fontWeight: 700,
-                                color: "#5eead4",
+                                color: "var(--text-accent)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.05em",
                             }}
@@ -487,7 +487,7 @@ const SubscriptionPage = () => {
                                         gap: 8,
                                         padding: "10px 18px",
                                         borderRadius: 12,
-                                        background: "rgba(255,255,255,0.05)",
+                                        background: "rgba(var(--fg),0.05)",
                                     }}
                                 >
                                     <Clock size={16} style={{ color: "var(--text-muted)" }} />
@@ -595,7 +595,7 @@ const SubscriptionPage = () => {
                                 gap: 10,
                                 padding: "14px 24px",
                                 borderRadius: 14,
-                                background: "rgba(255,255,255,0.03)",
+                                background: "rgba(var(--fg),0.03)",
                                 border: "1px solid var(--border-color)",
                                 color: "var(--text-primary)",
                                 fontSize: 16,
@@ -605,11 +605,11 @@ const SubscriptionPage = () => {
                                 transition: "all 0.2s ease",
                             }}
                             onMouseEnter={(e) => {
-                                e.currentTarget.style.background = "rgba(255,255,255,0.06)";
-                                e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
+                                e.currentTarget.style.background = "rgba(var(--fg),0.06)";
+                                e.currentTarget.style.borderColor = "rgba(var(--fg),0.2)";
                             }}
                             onMouseLeave={(e) => {
-                                e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                                e.currentTarget.style.background = "rgba(var(--fg),0.03)";
                                 e.currentTarget.style.borderColor = "var(--border-color)";
                             }}
                         >
@@ -646,16 +646,16 @@ const SubscriptionPage = () => {
                                                     justifyContent: "space-between",
                                                     padding: "16px 20px",
                                                     borderRadius: 14,
-                                                    background: "rgba(255,255,255,0.02)",
+                                                    background: "rgba(var(--fg),0.02)",
                                                     border: "1px solid transparent",
                                                     transition: "all 0.15s ease",
                                                 }}
                                                 onMouseEnter={(e) => {
-                                                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-                                                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                                                    e.currentTarget.style.background = "rgba(var(--fg),0.04)";
+                                                    e.currentTarget.style.borderColor = "rgba(var(--fg),0.06)";
                                                 }}
                                                 onMouseLeave={(e) => {
-                                                    e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                                                    e.currentTarget.style.background = "rgba(var(--fg),0.02)";
                                                     e.currentTarget.style.borderColor = "transparent";
                                                 }}
                                             >

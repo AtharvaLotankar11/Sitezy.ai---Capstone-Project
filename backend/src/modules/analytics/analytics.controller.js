@@ -8,6 +8,7 @@ import firebaseService from "../../agents/services/firebaseService.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Ollama } from "ollama";
 import { liveVisitors } from "../../sockets/visitor.socket.js";
+import { redactPII } from "../../utils/redact.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
@@ -116,16 +117,11 @@ export const getWebsiteAnalytics = async (req, res) => {
         let summary = "Not enough data for insights.";
 
         if (submissions.length > 0) {
-            try {
-                // Limit submissions for faster processing
-                const sampledSubmissions = submissions.slice(0, 50); // Reduced from 100 to 50
-                
-                // Ask Qwen to analyze the form submissions
-                const prompt = `
+            const buildPrompt = (rows) => `
 You are an advanced data analytics AI. Given the following form submissions from a business website, generate a structured analytics insight report. Think about what the business is and what kind of metrics make sense (e.g. juices sold, popular flavors, etc).
 
-Form Submissions Data: 
-${JSON.stringify(sampledSubmissions, null, 2)}
+Form Submissions Data:
+${JSON.stringify(rows)} // Limit to 100 for token limits
 
 Return a JSON object matching this structure EXACTLY. No markdown formatting, just raw JSON:
 {
@@ -135,39 +131,50 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
   ]
 }
 `;
-                console.log(`🧠 [Qwen AI] Initializing analysis on ${submissions.length} Firebase records (sampling ${sampledSubmissions.length})...`);
-                
-                const result = await Promise.race([
-                    ollamaClient.chat({
-                        model: 'qwen2.5:1.5b',
-                        messages: [
-                            { role: 'system', content: 'You are an advanced data analytics AI. You output strictly in JSON.' },
-                            { role: 'user', content: prompt }
-                        ],
-                        format: 'json',
-                        think: false,
-                        options: { 
-                            temperature: 0.1,
-                            num_predict: 500 // Limit response length for faster generation
-                        }
-                    }),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Qwen analysis timeout after 60s')), 60000)
-                    )
-                ]);
-                
-                const responseText = result.message.content;
-                let jsonStr = responseText;
-                const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-                if (jsonMatch) jsonStr = jsonMatch[1];
-                const parsed = JSON.parse(jsonStr.trim());
-                
-                if (parsed.summary) summary = parsed.summary;
-                if (parsed.insights) insights = parsed.insights;
-                console.log(`✅ [Qwen AI] Successfully derived insights and returned analytics data!`);
-            } catch (err) {
-                console.error("❌ [Qwen AI] Failed to generate AI insights:", err);
-                summary = "Failed to generate AI insights due to an error.";
+            const rows = submissions.slice(0, 100);
+            const prompt = buildPrompt(rows);
+            // Try the fast local model first; fall back to the cloud model so insights
+            // generate seamlessly even if the local model is unavailable.
+            let responseText = "";
+            try {
+                console.log(`🧠 [AI] Analyzing ${submissions.length} submissions...`);
+                const result = await ollamaClient.chat({
+                    model: 'qwen3.5:4b',
+                    messages: [
+                        { role: 'system', content: 'You are an advanced data analytics AI. You output strictly in JSON.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    format: 'json',
+                    think: false,
+                    options: { temperature: 0.1 }
+                });
+                responseText = result.message.content;
+            } catch (primaryErr) {
+                console.warn("[AI] Local model unavailable, using fallback:", primaryErr.message);
+                try {
+                    // Submissions leave the host here, so visitor PII is redacted first.
+                    const result = await model.generateContent(buildPrompt(redactPII(rows)));
+                    responseText = result.response.text();
+                } catch (fallbackErr) {
+                    console.error("[AI] Insight generation failed:", fallbackErr.message);
+                }
+            }
+
+            if (responseText) {
+                try {
+                    let jsonStr = responseText;
+                    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+                    if (jsonMatch) jsonStr = jsonMatch[1];
+                    const parsed = JSON.parse(jsonStr.trim());
+                    if (parsed.summary) summary = parsed.summary;
+                    if (parsed.insights) insights = parsed.insights;
+                    console.log(`✅ [AI] Derived insights from submissions.`);
+                } catch (parseErr) {
+                    console.error("[AI] Failed to parse insights JSON:", parseErr.message);
+                    summary = "Could not generate insights from the latest submissions.";
+                }
+            } else {
+                summary = "Could not generate insights right now. Please try again shortly.";
             }
         } else {
              insights = [
@@ -190,5 +197,28 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
     } catch (error) {
         console.error("[Analytics] Error:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * GET /api/analytics/website/:websiteId/submissions
+ * Returns the raw form submissions (lead data) for the website owner/admin.
+ */
+export const getFormSubmissions = async (req, res) => {
+    try {
+        const { websiteId } = req.params;
+        const tenantId = req.tenantId;
+
+        const website = await Website.findOne({ _id: websiteId, tenantId }).populate("tenantId");
+        if (!website) return res.status(404).json({ success: false, message: "Website not found or access denied" });
+
+        const tenantSlug = website.tenantId.slug || tenantId;
+        const websiteSlug = website.slug || website.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || websiteId;
+
+        const submissions = await firebaseService.getFormSubmissions(tenantSlug, websiteSlug, 500);
+        return res.json({ success: true, submissions, count: submissions.length });
+    } catch (error) {
+        console.error("[Analytics] Form submissions error:", error);
+        return res.status(500).json({ success: false, message: "Failed to load form submissions" });
     }
 };
