@@ -6,13 +6,13 @@ AI website builder with a deep-learning **SEO / engagement / design-flaw** engin
 - **frontend/** — React + Vite
 - **backend/** — Node/Express + MongoDB (+ Firebase, Socket.IO)
 - **ai_engine/** — Python Flask ML microservice (port 5050): layout recommender + DL SEO/design/engagement models
-- **LLMs** — Ollama (`qwen3.5:4b`) locally, with Google Gemini as fallback
+- **LLMs** — Ollama (`qwen2.5:1.5b` and `qwen2.5:3b`) locally, with Google Gemini as fallback
 
 ## Prerequisites
 - **Node.js 18+** and npm
 - **Python 3.10+** and pip
 - **MongoDB** (local or Atlas connection string)
-- **Ollama** — https://ollama.com — then: `ollama pull qwen3.5:4b`
+- **Ollama** — https://ollama.com — then: `ollama pull qwen2.5:1.5b` and `ollama pull qwen2.5:3b`
 - (optional) A Gemini API key and Unsplash API keys
 
 ## 1. Clone
@@ -59,8 +59,9 @@ python ai_service.py             # serves on http://localhost:5050
 
 ## 5. Start Ollama
 ```bash
-ollama serve            # if not already running
-ollama pull qwen3.5:4b  # one-time
+ollama serve            # if not already running (usually auto-starts on Windows)
+ollama pull qwen2.5:1.5b  # one-time - for analytics (fast, 986 MB)
+ollama pull qwen2.5:3b    # one-time - for content generation (better quality, 1.9 GB)
 ```
 
 ## Run order (4 terminals)
