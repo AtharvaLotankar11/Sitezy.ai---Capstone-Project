@@ -13,13 +13,16 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [analytics, setAnalytics] = useState(null);
+    const [preferredModel, setPreferredModel] = useState("qwen"); // "qwen" or "gemini"
     const [showSubs, setShowSubs] = useState(false);
 
     useEffect(() => {
         const fetchAnalytics = async () => {
             try {
                 setLoading(true);
-                const { data } = await api.get(`/analytics/website/${websiteId}`);
+                setError(null);
+                const { data } = await api.get(`/analytics/website/${websiteId}?preferredModel=${preferredModel}`);
+                console.log("Analytics response:", data);
                 if (data.success) {
                     setAnalytics(data.data);
                 } else {
@@ -34,42 +37,74 @@ export default function AnalyticsPage() {
         };
 
         if (websiteId) fetchAnalytics();
-    }, [websiteId]);
+    }, [websiteId, preferredModel]);
 
     return (
         <DashboardLayout>
             <style>{`@media (max-width: 720px){ .an-pad{ padding: 24px 18px 48px !important; } .an-pad h1{ font-size: 26px !important; } }`}</style>
             <div className="an-pad" style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 40px 60px" }}>
                 {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
-                    <Link to="/websites" style={{
-                        padding: 10, borderRadius: 12, background: "rgba(var(--fg),0.05)",
-                        color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center"
-                    }}>
-                        <ArrowLeft size={20} />
-                    </Link>
-                    <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                            <h1 className="font-display" style={{ fontSize: 34, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
-                                {analytics?.businessName ? `${analytics.businessName} Analytics` : "Project Analytics"}
-                            </h1>
-                            <span style={{
-                                padding: "4px 10px", borderRadius: 100, background: "rgba(20,184,166,0.15)",
-                                color: "var(--text-accent)", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, border: "1px solid rgba(20,184,166,0.28)"
-                            }}>
-                                <Sparkles size={12} /> AI Powered
-                            </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 40 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <Link to="/websites" style={{
+                            padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.05)",
+                            color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center"
+                        }}>
+                            <ArrowLeft size={20} />
+                        </Link>
+                        <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                                <h1 className="font-display" style={{ fontSize: 34, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
+                                    {analytics?.businessName ? `${analytics.businessName} Analytics` : "Project Analytics"}
+                                </h1>
+                                <span style={{
+                                    padding: "4px 10px", borderRadius: 100, background: "rgba(20,184,166,0.15)",
+                                    color: "#5eead4", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, border: "1px solid rgba(20,184,166,0.28)"
+                                }}>
+                                    <Sparkles size={12} /> {analytics?.modelUsed ? analytics.modelUsed : "AI Powered"}
+                                </span>
+                            </div>
+                            <p style={{ fontSize: 15, color: "var(--text-secondary)" }}>
+                                Live metrics and AI-generated insights from your dynamic forms.
+                            </p>
                         </div>
-                        <p style={{ fontSize: 15, color: "var(--text-secondary)" }}>
-                            Live metrics and AI-generated insights from your dynamic forms.
-                        </p>
+                    </div>
+
+                    {/* AI Engine Switcher */}
+                    <div style={{
+                        display: "flex", background: "rgba(255,255,255,0.04)", padding: 4, borderRadius: 14, border: "1px solid var(--border-color)", gap: 4
+                    }}>
+                        <button
+                            onClick={() => setPreferredModel("qwen")}
+                            style={{
+                                padding: "8px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+                                fontSize: 13, fontWeight: 600, transition: "all 0.2s ease",
+                                background: preferredModel === "qwen" ? "var(--color-primary)" : "transparent",
+                                color: preferredModel === "qwen" ? "#ffffff" : "var(--text-secondary)"
+                            }}
+                        >
+                            🤖 Qwen (Ollama)
+                        </button>
+                        <button
+                            onClick={() => setPreferredModel("gemini")}
+                            style={{
+                                padding: "8px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+                                fontSize: 13, fontWeight: 600, transition: "all 0.2s ease",
+                                background: preferredModel === "gemini" ? "var(--color-primary)" : "transparent",
+                                color: preferredModel === "gemini" ? "#ffffff" : "var(--text-secondary)"
+                            }}
+                        >
+                            ⚡ Gemini (Cloud AI)
+                        </button>
                     </div>
                 </div>
 
                 {loading ? (
                     <div style={{ minHeight: 400, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
                         <Loader2 size={32} className="animate-spin" style={{ color: "var(--color-primary)" }} />
-                        <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>Analyzing data with AI...</p>
+                        <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>
+                            Analyzing data with {preferredModel === "gemini" ? "Gemini Cloud AI" : "Qwen (Ollama)"}...
+                        </p>
                     </div>
                 ) : error ? (
                     <div style={{ padding: 32, background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: 24, display: "flex", alignItems: "center", gap: 16, color: "#f87171" }}>
@@ -139,7 +174,9 @@ export default function AnalyticsPage() {
                                     </div>
                                     <div>
                                         <h2 style={{ fontSize: 24, fontWeight: 800, color: "var(--text-primary)" }}>Dynamic Business Insights</h2>
-                                        <p style={{ fontSize: 14, color: "var(--color-primary)", fontWeight: 600 }}>Analyzed directly from user forms</p>
+                                        <p style={{ fontSize: 14, color: "var(--color-primary)", fontWeight: 600 }}>
+                                            Analyzed via {analytics.modelUsed || "AI Engine"}
+                                        </p>
                                     </div>
                                 </div>
                                 

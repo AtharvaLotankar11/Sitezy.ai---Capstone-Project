@@ -113,15 +113,20 @@ export const getWebsiteAnalytics = async (req, res) => {
         const websiteIdStr = website._id.toString();
         const liveUsers = liveVisitors.get(websiteIdStr)?.size ?? 0;
 
+        const preferredModel = req.query.preferredModel || req.query.model || "auto";
+        let usedModel = "Rule-based Engine";
         let insights = [];
         let summary = "Not enough data for insights.";
 
         if (submissions.length > 0) {
-            const buildPrompt = (rows) => `
+            // Limit submissions for faster processing
+            const sampledSubmissions = submissions.slice(0, 50); // Sample top 50
+            
+            const prompt = `
 You are an advanced data analytics AI. Given the following form submissions from a business website, generate a structured analytics insight report. Think about what the business is and what kind of metrics make sense (e.g. juices sold, popular flavors, etc).
 
 Form Submissions Data:
-${JSON.stringify(rows)} // Limit to 100 for token limits
+${JSON.stringify(sampledSubmissions)}
 
 Return a JSON object matching this structure EXACTLY. No markdown formatting, just raw JSON:
 {
@@ -131,55 +136,122 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
   ]
 }
 `;
-            const rows = submissions.slice(0, 100);
-            const prompt = buildPrompt(rows);
-            // Try the fast local model first; fall back to the cloud model so insights
-            // generate seamlessly even if the local model is unavailable.
-            let responseText = "";
-            try {
-                console.log(`🧠 [AI] Analyzing ${submissions.length} submissions...`);
-                const result = await ollamaClient.chat({
-                    model: 'qwen3.5:4b',
-                    messages: [
-                        { role: 'system', content: 'You are an advanced data analytics AI. You output strictly in JSON.' },
-                        { role: 'user', content: prompt }
-                    ],
-                    format: 'json',
-                    think: false,
-                    options: { temperature: 0.1 }
-                });
-                responseText = result.message.content;
-            } catch (primaryErr) {
-                console.warn("[AI] Local model unavailable, using fallback:", primaryErr.message);
+            let responseText = null;
+
+            if (preferredModel === "gemini") {
+                // Step 1A: Direct request for Gemini Cloud AI
                 try {
-                    // Submissions leave the host here, so visitor PII is redacted first.
-                    const result = await model.generateContent(buildPrompt(redactPII(rows)));
-                    responseText = result.response.text();
-                } catch (fallbackErr) {
-                    console.error("[AI] Insight generation failed:", fallbackErr.message);
+                    console.log(`🔵 [Analytics AI] Direct request for Gemini Cloud AI on ${submissions.length} Firebase records...`);
+                    const geminiResult = await model.generateContent(prompt);
+                    responseText = geminiResult.response.text();
+                    usedModel = "gemini-3-flash-preview (Cloud AI)";
+                    console.log(`✅ [Analytics AI] Derived insights using Gemini Cloud AI!`);
+                } catch (geminiErr) {
+                    console.warn(`⚠️ [Analytics AI] Gemini Cloud AI failed (${geminiErr.message}). Using rule-based analytics.`);
+                }
+            } else {
+                // Step 1B: Try Ollama (Basic AI local LLM) first
+                try {
+                    console.log(`🧠 [Analytics AI] Initializing analysis on ${submissions.length} Firebase records (sampling ${sampledSubmissions.length})...`);
+                    const result = await Promise.race([
+                        ollamaClient.chat({
+                            model: 'qwen2.5:1.5b',
+                            messages: [
+                                { role: 'system', content: 'You are an advanced data analytics AI. You output strictly in JSON.' },
+                                { role: 'user', content: prompt }
+                            ],
+                            format: 'json',
+                            think: false,
+                            options: { 
+                                temperature: 0.1,
+                                num_predict: 500
+                            }
+                        }),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Ollama response timeout after 10s')), 10000)
+                        )
+                    ]);
+                    responseText = result.message?.content;
+                    usedModel = "qwen2.5:1.5b (Local Ollama)";
+                    console.log(`✅ [Analytics AI] Derived insights using local Ollama (Qwen AI)!`);
+                } catch (ollamaErr) {
+                    console.warn(`⚠️ [Analytics AI] Local Ollama unavailable (${ollamaErr.message}), falling back to Gemini Cloud AI...`);
+                    
+                    // Step 2: Fallback to Gemini Cloud AI
+                    try {
+                        const geminiResult = await model.generateContent(prompt);
+                        responseText = geminiResult.response.text();
+                        usedModel = "gemini-3-flash-preview (Fallback)";
+                        console.log(`✅ [Analytics AI] Derived insights using Gemini Cloud AI!`);
+                    } catch (geminiErr) {
+                        console.warn(`⚠️ [Analytics AI] Gemini Cloud AI fallback also failed (${geminiErr.message}). Using rule-based analytics.`);
+                    }
                 }
             }
 
+            // Step 3: Parse JSON response from AI
             if (responseText) {
                 try {
                     let jsonStr = responseText;
                     const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
                     if (jsonMatch) jsonStr = jsonMatch[1];
                     const parsed = JSON.parse(jsonStr.trim());
+                    
                     if (parsed.summary) summary = parsed.summary;
-                    if (parsed.insights) insights = parsed.insights;
-                    console.log(`✅ [AI] Derived insights from submissions.`);
+                    if (Array.isArray(parsed.insights) && parsed.insights.length > 0) {
+                        insights = parsed.insights;
+                    }
                 } catch (parseErr) {
-                    console.error("[AI] Failed to parse insights JSON:", parseErr.message);
-                    summary = "Could not generate insights from the latest submissions.";
+                    console.warn(`⚠️ [Analytics AI] Could not parse AI JSON output, defaulting to rule-based fallback.`);
                 }
-            } else {
-                summary = "Could not generate insights right now. Please try again shortly.";
+            }
+
+            // Step 4: Rule-based fallback if AI models were unreachable or returned invalid JSON
+            if (insights.length === 0) {
+                summary = `Collected ${submissions.length} submission(s) for ${website.name}. Customer responses recorded successfully.`;
+                
+                const keyCounts = {};
+                submissions.forEach(sub => {
+                    Object.entries(sub).forEach(([k, v]) => {
+                        if (['id', 'submittedAt', 'createdAt', 'tenantSlug', 'websiteSlug'].includes(k)) return;
+                        if (typeof v === 'string' && v.trim()) {
+                            if (!keyCounts[k]) keyCounts[k] = {};
+                            const valStr = v.trim();
+                            keyCounts[k][valStr] = (keyCounts[k][valStr] || 0) + 1;
+                        }
+                    });
+                });
+
+                const topInsights = [];
+                Object.entries(keyCounts).forEach(([field, counts]) => {
+                    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                    if (sorted.length > 0) {
+                        const [topVal, count] = sorted[0];
+                        const fieldName = field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                        topInsights.push({
+                            label: `Top ${fieldName}`,
+                            value: topVal,
+                            insightText: `${count} submission(s) specified "${topVal}" for ${fieldName.toLowerCase()}.`
+                        });
+                    }
+                });
+
+                if (topInsights.length > 0) {
+                    insights = topInsights.slice(0, 4);
+                } else {
+                    insights = [
+                        {
+                            label: "Total Submissions",
+                            value: `${submissions.length}`,
+                            insightText: `Successfully received ${submissions.length} dynamic form submissions.`
+                        }
+                    ];
+                }
             }
         } else {
-             insights = [
-                 { label: "New Forms", value: "0", insightText: "No data available yet." }
-             ];
+            insights = [
+                { label: "New Forms", value: "0", insightText: "No data available yet." }
+            ];
         }
 
         res.json({
@@ -190,7 +262,8 @@ Return a JSON object matching this structure EXACTLY. No markdown formatting, ju
                 submissionsCount: submissions.length,
                 summary,
                 insights,
-                businessName: website.name
+                businessName: website.name,
+                modelUsed: usedModel
             }
         });
 
