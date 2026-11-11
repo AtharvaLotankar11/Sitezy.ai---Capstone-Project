@@ -927,9 +927,9 @@ COLOR RULES:
             console.log("🔵 [AI] Successfully used Pro AI for content generation.");
         } else {
             try {
-                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen3.5)...");
+                console.log("🤖 [AI] Attempting generation with Basic AI (Ollama qwen2.5:3b)...");
                 const r = await ollamaClient.chat({
-                    model: 'qwen3.5:4b',
+                    model: 'qwen2.5:3b',
                     think: false,
                     messages: [
                         { role: 'system', content: 'You are an expert AI website generator and elite copywriter. You MUST generate unique, engaging content perfectly tailored to the requested business type. NEVER blindly copy placeholder text from templates.' },
@@ -990,7 +990,7 @@ COLOR RULES:
         // regenerate only empty ones with a short local call (deterministic default on failure).
         const formStats = await repairForms(aiResponse, { businessType, tone, targetAudience }, async (formPrompt) => {
             const r = await ollamaClient.chat({
-                model: "qwen3.5:4b", think: false, format: "json",
+                model: "qwen2.5:3b", think: false, format: "json",
                 messages: [{ role: "user", content: formPrompt }],
                 options: { num_predict: 900, num_ctx: 4096, temperature: 0.3 },
             });
@@ -1243,10 +1243,10 @@ Return ONLY a JSON object (no prose, no markdown fences) with EXACTLY these keys
 Guidance: choose colors that truly match the concept's industry & mood (spa→soft rose, fintech→deep blue, eco→green, luxury dining→gold/espresso, kids→bright playful). Choose theme by vibe (sleek/premium/nightlife→Dark; clean/airy/editorial→Light).`;
 
         let text = "";
-        let usedModel = "qwen3.5:4b (Ollama)";
+        let usedModel = "qwen2.5:3b (Ollama)";
         try {
             const r = await ollamaClient.chat({
-                model: 'qwen3.5:4b',
+                model: 'qwen2.5:3b',
                 think: false,
                 messages: [
                     { role: 'system', content: 'You are a precise design configuration engine. You output only strict, valid JSON.' },
@@ -1461,10 +1461,10 @@ WORKED EXAMPLE — for the concept "a cozy neighbourhood coffee shop in Pune":
 Now do the same for the client's concept above. Every option must be unmistakably about THEIR business.`;
 
         let text = "";
-        let usedModel = "qwen3.5:4b (Ollama)";
+        let usedModel = "qwen2.5:3b (Ollama)";
         try {
             const r = await ollamaClient.chat({
-                model: 'qwen3.5:4b',
+                model: 'qwen2.5:3b',
                 think: false,
                 messages: [
                     { role: 'system', content: 'You are a precise brand-onboarding engine. You output only strict, valid JSON.' },
@@ -1559,9 +1559,9 @@ ${siteContext}
 `;
 
         try {
-            console.log("🤖 [AI Chat] Attempting answer with qwen3.5:4b...");
+            console.log("🤖 [AI Chat] Attempting answer with qwen2.5:3b...");
             const r = await ollamaClient.chat({
-                model: 'qwen3.5:4b',
+                model: 'qwen2.5:3b',
                 think: false,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -1623,7 +1623,7 @@ export const helpAssistant = async (req, res) => {
         const prompt = `${HELP_KNOWLEDGE}\n\nThe user is currently on the ${where || "app"}.\n\nUser question: ${question}`;
         try {
             const r = await ollamaClient.chat({
-                model: "qwen3.5:4b", think: false,
+                model: "qwen2.5:3b", think: false,
                 messages: [{ role: "system", content: "You are Sitezy's concise, friendly in-app help assistant." }, { role: "user", content: prompt }],
                 options: { num_predict: 450, num_ctx: 8192, temperature: 0.3 },
             });

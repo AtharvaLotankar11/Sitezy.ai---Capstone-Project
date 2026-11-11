@@ -254,10 +254,10 @@ Return ONLY JSON (no markdown):
 Rules: only edit existing fields shown above; keep each value concise and within sensible length; do not invent new sections; only include fields you actually improved.`;
 
     let text = "";
-    let model = "qwen3.5:4b (Ollama)";
+    let model = "qwen2.5:3b (Ollama)";
     try {
         const r = await ollamaClient.chat({
-            model: "qwen3.5:4b", think: false,
+            model: "qwen2.5:3b", think: false,
             messages: [
                 { role: "system", content: "You are a precise SEO copy editor. You output only strict, valid JSON." },
                 { role: "user", content: prompt },

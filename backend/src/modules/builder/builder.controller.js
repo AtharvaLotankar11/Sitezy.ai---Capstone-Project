@@ -32,7 +32,7 @@ Return ONLY JSON (no markdown):
     let text = "";
     try {
         const r = await _ollama.chat({
-            model: "qwen3.5:4b", think: false,
+            model: "qwen2.5:3b", think: false,
             messages: [{ role: "system", content: "You output only strict valid JSON." }, { role: "user", content: prompt }],
             format: "json", options: { num_predict: 600, temperature: 0.5 },
         });
