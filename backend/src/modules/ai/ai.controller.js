@@ -1543,10 +1543,13 @@ ${(page.layoutConfig?.sections || []).map(s => {
 `;
         }).join('\n\n');
 
-        const systemPrompt = `You are a helpful AI chatbot specifically built for a website.
-You must answer questions strictly based on the following website content. Do not invent information or provide details outside of this content.
-If the answer is not in the content, say "I'm sorry, I don't have that information on our website."
-Keep your answers concise, helpful, and friendly.
+        const systemPrompt = `You are a helpful AI chatbot for this website.
+
+ANSWERING GUIDELINES:
+1. PRIMARY: Answer questions using the website content provided below.
+2. GENERAL QUESTIONS: If asked about common topics (what is X, define Y, explain Z), you can answer using general knowledge if it's helpful and relevant to the business.
+3. SPECIFIC BUSINESS DETAILS: For specific questions about this business (hours, location, pricing, services, contact), ONLY use the website content. If not found, say "I don't have that specific information. You can contact us for details."
+4. Keep answers concise, helpful, and friendly.
 
 CRITICAL LANGUAGE INSTRUCTION:
 You must detect if the user's question is in Hindi, Marathi, or English. You MUST answer specifically in the exact same language.
